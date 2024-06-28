@@ -12,7 +12,7 @@ mod utils;
 /// Command line interface for managing the application
 #[derive(Parser)]
 #[clap(name = "CLI")]
-#[clap(about = "A CLI for managing configurations and connections", long_about = None)]
+#[clap(about = "A CLI for managing service dependencies", long_about = None)]
 struct CLI {
     #[clap(subcommand)]
     command: Commands,
