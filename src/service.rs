@@ -10,8 +10,9 @@ use crate::{
     Environment,
 };
 
-fn open_api_client_generator(service: &Service, lang: LANG) {
-    let output_dir = format!("test/{}_client", service.name);
+fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &String) {
+    let output_dir = format!("{}/{}_client", root_dir, service.name);
+    println!("Generating client for : {}", service.name);
 
     let output = Command::new("openapi-generator")
         .arg("generate")
@@ -30,7 +31,7 @@ fn open_api_client_generator(service: &Service, lang: LANG) {
 
     match output {
         Ok(cmd_output) => {
-            println!("Error : {:?}", cmd_output);
+            // println!("Output : {:?}", cmd_output);
             for line in String::from_utf8(cmd_output.stdout)
                 .unwrap()
                 .split("\n")
@@ -38,28 +39,26 @@ fn open_api_client_generator(service: &Service, lang: LANG) {
             {
                 println!("{}", line)
             }
-            match Command::new("cargo")
-                .arg("add")
-                .arg(format!("{}_client", service.name))
-                .arg("--path")
-                .arg(format!("{}_client", service.name))
-                .output()
-            {
-                Ok(_) => {
-                    println!("Added successfully");
-                }
-                Err(e) => {
-                    println!("Error occured! {:?}", e);
-                    println!("Potentially you dont have cargo install")
-                }
-            }
+            // match Command::new("cargo")
+            //     .arg("add")
+            //     .arg(format!("{}_client", service.name))
+            //     .arg("--path")
+            //     .arg(format!("{}_client", service.name))
+            //     .output()
+            // {
+            //     Ok(_) => {
+            //         println!("Added successfully");
+            //     }
+            //     Err(e) => {
+            //         println!("Error occured! {:?}", e);
+            //         println!("Potentially you dont have cargo install")
+            //     }
+            // }
         }
         Err(err) => {
             print!("{:?}", err)
         }
     }
-
-    exit(1);
 }
 
 fn print_openapi_generator_not_found() {
@@ -110,6 +109,8 @@ pub fn generate_client(config_path: &Path, env: Environment) {
         }
     };
 
+    println!("{:?}", services_config);
+
     for service in services_config.services.unwrap().iter() {
         open_api_client_generator(
             &Service {
@@ -117,6 +118,7 @@ pub fn generate_client(config_path: &Path, env: Environment) {
                 name: service.to_string(),
             },
             services_config.lang,
+            &services_config.dir
         );
     }
 }

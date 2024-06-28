@@ -1,4 +1,4 @@
-dir = "test"
-lang = "Rust"
+services = ["ServiceOne", "ServiceTwo"]
+lang = "TS"
+dir = "src/services"
 repo = "ginger-society/connector-repo"
-services = ["ServiceOne"]

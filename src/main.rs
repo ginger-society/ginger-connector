@@ -2,9 +2,11 @@ use core::fmt;
 use std::path::Path;
 
 use clap::{Parser, Subcommand, ValueEnum};
+use init::initialize;
 use service::generate_client;
 use utils::fetch_metadata_and_process;
 
+mod init;
 mod service;
 mod utils;
 /// Command line interface for managing the application
@@ -19,10 +21,11 @@ struct CLI {
 #[derive(Subcommand)]
 enum Commands {
     /// Fetch metadata and process it
-    Config {
+    Init {
         #[clap(value_parser)]
         repo_path: String,
     },
+    Config,
     /// Connect to an environment
     Connect {
         #[clap(value_enum, default_value_t=Environment::Dev)]
@@ -52,9 +55,10 @@ fn main() {
     let config_path = Path::new("services.toml");
 
     match &cli.command {
-        Commands::Config { repo_path } => {
-            fetch_metadata_and_process(repo_path, config_path);
+        Commands::Config {} => {
+            fetch_metadata_and_process(config_path);
         }
         Commands::Connect { env } => generate_client(config_path, env.clone()),
+        Commands::Init { repo_path } => initialize(repo_path, config_path),
     }
 }

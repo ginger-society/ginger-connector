@@ -21,8 +21,14 @@ impl fmt::Display for LANG {
         match self {
             LANG::Rust => write!(f, "rust"),
             LANG::TS => write!(f, "typescript-fetch"),
-            LANG::Python => write!(f, "Python"),
+            LANG::Python => write!(f, "python"),
         }
+    }
+}
+
+impl LANG {
+    pub fn all() -> Vec<LANG> {
+        vec![LANG::Rust, LANG::TS, LANG::Python]
     }
 }
 
@@ -51,18 +57,25 @@ pub fn read_config_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Error
     Ok(config)
 }
 
-fn write_config_file<P: AsRef<Path>>(path: P, config: &Config) -> Result<(), Box<dyn Error>> {
+pub fn write_config_file<P: AsRef<Path>>(path: P, config: &Config) -> Result<(), Box<dyn Error>> {
     let content = toml::to_string(config)?;
     fs::write(path, content)?;
     Ok(())
 }
 
 #[tokio::main]
-pub async fn fetch_metadata_and_process(path: &String, config_path: &Path) {
+pub async fn fetch_metadata_and_process(config_path: &Path) {
     let mut config = read_config_file(config_path).unwrap();
 
     let client = reqwest::Client::new();
-    let response = client.get(path).send().await.unwrap();
+    let response = client
+        .get(format!(
+            "https://raw.githubusercontent.com/{}/main/__metadata__.json",
+            config.repo
+        ))
+        .send()
+        .await
+        .unwrap();
 
     if response.status().is_success() {
         let meta_data: RepoMetaData = response.json().await.unwrap();
