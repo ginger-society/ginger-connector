@@ -1,360 +1,109 @@
-use std::{
-    env,
-    fmt::{self},
-    fs::{self, File},
-    io::Write,
-    process::{exit, Command},
-};
+use std::{error::Error, fmt, fs, path::Path, process::exit};
 
 use colored::Colorize;
-use inquire::Select;
+use inquire::{list_option::ListOption, validator::Validation, MultiSelect};
 use serde::{Deserialize, Serialize};
 
-use crate::{generators::init::STAFFE_PACKAGE_KIND, utils};
-
-#[derive(Deserialize, Debug, Clone, Serialize)]
-struct Service {
-    id: i32,
-    name: String,
-    prod_url: String,
-    prod_schema_url: String,
-    stage_url: String,
-    stage_schema_url: String,
-    auth_token_env_key: String,
+#[derive(Debug, Clone)]
+pub struct Service {
+    pub schema_url: String,
+    pub name: String,
 }
-
-#[derive(Deserialize, Debug, Clone, Serialize)]
-struct ServicesConfig {
-    schema: String,
-    services: Vec<Service>,
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum LANG {
+    Rust,
+    TS,
+    Python,
 }
-
-impl fmt::Display for Service {
+// This formatting is for OpenAPI generator
+impl fmt::Display for LANG {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name)
+        match self {
+            LANG::Rust => write!(f, "rust"),
+            LANG::TS => write!(f, "typescript-fetch"),
+            LANG::Python => write!(f, "Python"),
+        }
     }
 }
 
-fn read_services_config_json() -> Result<ServicesConfig, Box<dyn std::error::Error>> {
-    match fs::read_to_string("services.config.json") {
-        Ok(c) => {
-            let services_config: ServicesConfig = match serde_json::from_str(&c) {
-                Ok(c) => c,
-                Err(error) => {
-                    println!("services.config.json is invalid : `{}`", error);
-                    exit(1);
-                }
-            };
-            return Ok(services_config);
-        }
-        Err(error) => {
-            eprintln!(
-                "Could not read file `{}` , `{}`",
-                "services.config.json", error
-            );
-            return Err(Box::new(error));
-        }
-    };
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+struct RepoMetaData {
+    version: String,
+    services: Vec<String>,
 }
 
-fn write_services_config_json(config: ServicesConfig) {
-    let config_str = match serde_json::to_string_pretty(&config) {
-        Ok(c) => c,
-        Err(_) => {
-            println!("Invalid JSON recieved.");
-            exit(1)
-        }
-    };
-    let service_config_file_name = String::from("services.config.json");
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+struct ServiceMetaData {
+    envs: Vec<String>,
+}
 
-    match File::create(&service_config_file_name) {
-        Ok(mut c) => {
-            match c.write_all(config_str.as_bytes()) {
-                Ok(_) => println!("Yayyy!. Success"),
-                Err(err) => eprintln!("Unable to write service config file : {}", err),
-            };
-        }
-        Err(_) => {
-            eprintln!(
-                "Unable to write config to {} file, exiting",
-                service_config_file_name
-            );
-            exit(1)
-        }
-    };
+#[derive(Deserialize, Debug, Serialize)]
+pub struct Config {
+    pub services: Option<Vec<String>>,
+    pub lang: LANG,
+    pub dir: String,
+    pub repo: String,
+}
+
+pub fn read_config_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Error>> {
+    let content = fs::read_to_string(path)?;
+    let config: Config = toml::from_str(&content)?;
+    Ok(config)
+}
+
+fn write_config_file<P: AsRef<Path>>(path: P, config: &Config) -> Result<(), Box<dyn Error>> {
+    let content = toml::to_string(config)?;
+    fs::write(path, content)?;
+    Ok(())
 }
 
 #[tokio::main]
-pub async fn add_service(openapi_config: Configuration) {
-    utils::check_staffe_init();
+pub async fn fetch_metadata_and_process(path: &String, config_path: &Path) {
+    let mut config = read_config_file(config_path).unwrap();
 
-    let mut existing_services_config = match read_services_config_json() {
-        Ok(c) => c,
-        Err(_) => {
-            println!("We will create one for you");
-            ServicesConfig {
-                schema: String::from("1.0.0"),
-                services: vec![],
-            }
-        }
-    };
+    let client = reqwest::Client::new();
+    let response = client.get(path).send().await.unwrap();
 
-    let mut ids = vec![];
-    let mut existing_services_names = vec![];
-    for s in existing_services_config.services.iter() {
-        ids.push(s.id);
-        existing_services_names.push(s.name.clone());
-    }
-    if existing_services_names.len() != 0 {
+    if response.status().is_success() {
+        let meta_data: RepoMetaData = response.json().await.unwrap();
         println!(
-            "Existing Services in this project are : {} ",
-            existing_services_names.join(",").blue()
+            "Services Repo version : {}",
+            format!("{}", &meta_data.version).blue().underline()
         );
-    }
 
-    match discover_services_api::discover_services_list(&openapi_config).await {
-        Ok(services) => {
-            let mut services_options = vec![];
-            for service in services.iter() {
-                if service.id.is_none() {
-                    continue;
-                }
-                if service.id.is_some() && ids.contains(&service.id.unwrap()) {
-                    continue;
-                }
-                services_options.push(Service {
-                    id: service.id.unwrap().clone(),
-                    name: service.name.clone(),
-                    prod_url: service.prod_url.clone(),
-                    prod_schema_url: service.prod_schema_url.clone(),
-                    stage_url: service.stage_url.clone(),
-                    stage_schema_url: service.stage_schema_url.clone(),
-                    auth_token_env_key: service.auth_token_env_key.clone(),
-                })
+        let service_selector_validator = |a: &[ListOption<&String>]| {
+            if a.len() < 1 {
+                return Ok(Validation::Invalid(
+                    "At least one table is required!".into(),
+                ));
             }
+            Ok(Validation::Valid)
+        };
 
-            if services_options.len().eq(&0) {
-                println!("We could not discover any service to be added. Check with a team lead. It may be possible that you have not added any service to the staffe , you can use {} from the service project ( not this project ) to publish it." , "staffe push".blue());
-                exit(1);
-            }
+        let mut existing_services_namespace: Vec<usize> = vec![];
 
-            match Select::new(
-                "Select a service you want to add to this project",
-                services_options,
-            )
-            .prompt()
-            {
-                Ok(selected_service) => {
-                    existing_services_config.services.push(selected_service);
-                    write_services_config_json(existing_services_config);
-                    println!(
-                        "Now you can use {} to generate / update endpoints from this service",
-                        "staffe generate-service-client".blue().underline()
-                    )
-                }
-                Err(_) => {
-                    println!("Operation cancelled by the user");
-                    exit(1);
-                }
-            };
-        }
-        Err(_) => {
-            eprintln!("Unable to discover services");
-            exit(1)
-        }
-    };
-    println!("Generating service")
-}
-
-fn open_api_client_generator(service: &Service) {
-    let staffe_config = match utils::read_toml() {
-        Ok(c) => c,
-        Err(_) => {
-            println!("Unable to read the staffe.toml file");
-            exit(1);
-        }
-    };
-
-    let rust_kinds = vec![STAFFE_PACKAGE_KIND::RustBin.to_string()];
-    let ts_kinds = vec![
-        STAFFE_PACKAGE_KIND::FrontendNext.to_string(),
-        STAFFE_PACKAGE_KIND::BackendKoa.to_string(),
-        STAFFE_PACKAGE_KIND::TSLib.to_string(),
-    ];
-
-    let kind = staffe_config.package.kind.unwrap();
-
-    if rust_kinds.contains(&kind) {
-        match Command::new("openapi-generator-cli")
-            .arg("generate")
-            .arg("-g rust")
-            .arg(format!(
-                "-i {}{}",
-                service.stage_url, service.stage_schema_url
-            ))
-            .arg(format!("-o {}_client", service.name))
-            .arg(format!(
-                "--additional-properties=useSingleRequestParameter=true,packageName={}_client",
-                service.name
-            ))
-            .output()
-        {
-            Ok(cmd_output) => {
-                for line in String::from_utf8(cmd_output.stdout)
-                    .unwrap()
-                    .split("\n")
-                    .into_iter()
-                {
-                    println!("{}", line)
-                }
-                match Command::new("cargo")
-                    .arg("add")
-                    .arg(format!("{}_client", service.name))
-                    .arg("--path")
-                    .arg(format!("{}_client", service.name))
-                    .output()
-                {
-                    Ok(_) => {
-                        println!("Added successfully");
-                    }
-                    Err(e) => {
-                        println!("Error occured! {:?}", e);
-                        println!("Potentially you dont have cargo install")
-                    }
-                }
-            }
-            Err(_) => {}
-        }
-    } else if ts_kinds.contains(&kind) {
-        let mut root_dir = String::from("services");
-        if kind.eq(&STAFFE_PACKAGE_KIND::BackendKoa.to_string()) {
-            root_dir = String::from("app/services");
-        } else if kind.eq(&STAFFE_PACKAGE_KIND::TSLib.to_string()) {
-            root_dir = String::from("src/services")
-        }
-        println!("Generating for {} in {}", kind, root_dir);
-
-        match Command::new("openapi-generator-cli")
-            .arg("generate")
-            .arg("--generator-name")
-            .arg("typescript-fetch")
-            .arg(format!(
-                "-i {}{}",
-                service.stage_url, service.stage_schema_url
-            ))
-            .arg(format!("-o {}/{}", root_dir, service.name))
-            .arg("--additional-properties=typescriptThreePlus=true")
-            .output()
-        {
-            Ok(cmd_output) => {
-                for line in String::from_utf8(cmd_output.stdout)
-                    .unwrap()
-                    .split("\n")
-                    .into_iter()
-                {
-                    println!("{}", line)
-                }
-            }
-            Err(_) => exit(1),
-        }
-    }
-
-    exit(1);
-}
-
-fn present_service_choices_for_client_genration(services_config: ServicesConfig) {
-    match Select::new(
-        "Please select the service for which you want to generate the client",
-        services_config.services,
-    )
-    .prompt()
-    {
-        Ok(selected_service) => {
-            open_api_client_generator(&selected_service);
-        }
-        Err(_) => {
-            println!("You cancelled the operation");
-        }
-    }
-}
-
-fn print_openapi_generator_not_found() {
-    println!("The open API generator is not installed in your machine. Please use {} on MacOS / Windows / Linux" , "npm install @openapitools/openapi-generator-cli -g".green());
-    exit(1);
-}
-
-pub fn generate_client() {
-    utils::check_staffe_init();
-
-    match Command::new("java").arg("-version").output() {
-        Ok(cmd_output) => {
-            if !String::from_utf8(cmd_output.stderr)
-                .unwrap()
-                .contains("java version")
-            {
-                println!("Java is not installed on your machine. Please use https://www.java.com/en/download/help/download_options.html to install Java first");
-                exit(1);
-            } else {
-                match Command::new("openapi-generator-cli")
-                    .arg("--version")
-                    .output()
-                {
-                    Ok(cmd_output) => {
-                        // println!("{:?}", cmd_output);
-                        if !String::from_utf8(cmd_output.stderr)
-                            .unwrap()
-                            .contains("Usage: openapi-generator-cli")
-                        {
-                            print_openapi_generator_not_found();
-                            exit(1);
-                        } else {
-                        };
-                    }
-                    Err(_) => {
-                        print_openapi_generator_not_found();
-                    }
-                }
-            };
-        }
-        Err(_) => {}
-    }
-
-    let services_config = match read_services_config_json() {
-        Ok(c) => c,
-        Err(_) => {
-            println!(
-                "There is no service configuration found. Please use {} to add one. Exiting",
-                "staffe add-service".blue()
-            );
-            exit(1);
-        }
-    };
-    let raw_args: Vec<String> = env::args().collect();
-
-    if raw_args.len().eq(&2) {
-        present_service_choices_for_client_genration(services_config.clone());
-        exit(1);
-    }
-
-    match raw_args.get(2) {
-        Some(service_name) => {
-            if service_name.eq("all") {
-                for service in services_config.services.iter() {
-                    open_api_client_generator(service)
-                }
-            } else {
-                for service in services_config.services.iter() {
-                    if service.name.eq(service_name) {
-                        open_api_client_generator(service);
-                    }
-                }
-                println!(
-                    "The denpendent service {} does not exist in services.config.json",
-                    service_name.red()
-                );
-                present_service_choices_for_client_genration(services_config);
+        for (itter_count, service_name) in config.services.unwrap().iter().enumerate() {
+            if meta_data.services.contains(&service_name) {
+                existing_services_namespace.push(itter_count);
             }
         }
-        None => {}
+
+        let ans = MultiSelect::new(
+            "Select the services you want to add to this project ",
+            meta_data.services.clone(),
+        )
+        .with_validator(service_selector_validator)
+        .with_page_size(20)
+        .with_default(&existing_services_namespace)
+        .prompt();
+
+        config.services = Some(ans.unwrap());
+        match write_config_file(config_path, &config){
+            Ok(_) => println!("Configuration updated successfully"),
+            Err(_) => println!("Counld not save the config file. Please check if you have approperiate permission to write")
+        };
+    } else {
+        println!("Unable to get the metadata for this template");
+        exit(1)
     }
 }

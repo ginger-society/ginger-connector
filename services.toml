@@ -1,0 +1,4 @@
+dir = "test"
+lang = "Rust"
+repo = "ginger-society/connector-repo"
+services = ["ServiceOne"]

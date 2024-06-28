@@ -1,0 +1,10 @@
+#  This repo is to be used to tap
+repo = "ginger-society/ginger-connector"
+
+[[services]]
+auth_token_env_key = "iam_auth"
+name = "ServiceOne"
+prod_schema_url = "/swagger/?format=openapi"
+prod_url = "http://localhost:8001"
+stage_schema_url = "/swagger/?format=openapi"
+stage_url = "http://localhost:8001"
