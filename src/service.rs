@@ -1,4 +1,6 @@
 use std::{
+    fs::OpenOptions,
+    io::Write,
     path::Path,
     process::{exit, Command},
 };
@@ -10,9 +12,9 @@ use crate::{
     Environment,
 };
 
-fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &String) {
+fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base_url: &str) {
     let output_dir = format!("{}/{}_client", root_dir, service.name);
-    println!("Generating client for : {}", service.name);
+    println!("Generating client for: {}", service.name);
 
     let output = Command::new("openapi-generator")
         .arg("generate")
@@ -31,38 +33,67 @@ fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &String) {
 
     match output {
         Ok(cmd_output) => {
-            // println!("Output : {:?}", cmd_output);
             for line in String::from_utf8(cmd_output.stdout)
                 .unwrap()
-                .split("\n")
+                .split('\n')
                 .into_iter()
             {
                 println!("{}", line)
             }
-            // match Command::new("cargo")
-            //     .arg("add")
-            //     .arg(format!("{}_client", service.name))
-            //     .arg("--path")
-            //     .arg(format!("{}_client", service.name))
-            //     .output()
-            // {
-            //     Ok(_) => {
-            //         println!("Added successfully");
-            //     }
-            //     Err(e) => {
-            //         println!("Error occured! {:?}", e);
-            //         println!("Potentially you dont have cargo install")
-            //     }
-            // }
+
+            match lang {
+                LANG::Rust => todo!(),
+                LANG::TS => {
+                    // Add content to index.ts
+                    let index_ts_path = format!("{}/index.ts", output_dir);
+                    let index_ts_content = format!(
+                        r#"/* tslint:disable */
+/* eslint-disable */
+
+import {{ DefaultApi }} from './apis'
+import {{ Configuration }} from './runtime'
+
+export * from './runtime';
+export * from './apis/index';
+export * from './models/index';
+
+const configuration = new Configuration({{
+    basePath: '{}'
+}})
+const client = new DefaultApi(configuration)
+export default client
+"#,
+                        base_url
+                    );
+
+                    match OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .truncate(true)
+                        .open(&index_ts_path)
+                    {
+                        Ok(mut file) => {
+                            if let Err(e) = file.write_all(index_ts_content.as_bytes()) {
+                                eprintln!("Error writing to index.ts: {:?}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("Error creating index.ts: {:?}", e),
+                    }
+                }
+                LANG::Python => todo!(),
+            }
         }
         Err(err) => {
-            print!("{:?}", err)
+            eprintln!("{:?}", err)
         }
     }
 }
 
 fn print_openapi_generator_not_found() {
-    println!("The open API generator is not installed in your machine. Please use {} on MacOS / Windows / Linux" , "npm install @openapitools/openapi-generator-cli -g".green());
+    println!(
+        "The OpenAPI generator is not installed on your machine. Please use {} on MacOS / Windows / Linux",
+        "npm install @openapitools/openapi-generator-cli -g".green()
+    );
     exit(1);
 }
 
@@ -83,18 +114,16 @@ pub fn generate_client(config_path: &Path, env: Environment) {
                             .contains("openapi-generator-cli")
                         {
                             print_openapi_generator_not_found();
-                            exit(1);
-                        } else {
-                        };
+                        }
                     }
                     Err(_) => {
                         print_openapi_generator_not_found();
                     }
                 }
-            };
+            }
         }
         Err(err) => {
-            print!("{:?}", err)
+            eprintln!("{:?}", err)
         }
     }
 
@@ -111,14 +140,24 @@ pub fn generate_client(config_path: &Path, env: Environment) {
 
     println!("{:?}", services_config);
 
-    for service in services_config.services.unwrap().iter() {
+    for (service_name, service_urls) in services_config.services.unwrap().iter() {
+        let base_url = match env {
+            Environment::Dev => service_urls["dev"].clone(),
+            Environment::Stage => service_urls["stage"].clone(),
+            Environment::Prod => service_urls["prod"].clone(),
+        };
+
         open_api_client_generator(
             &Service {
-                schema_url: format!("https://raw.githubusercontent.com/ginger-society/connector-repo/main/{}/{}.json", service, env),
-                name: service.to_string(),
+                schema_url: format!(
+                    "https://raw.githubusercontent.com/{}/main/{}/{}.json",
+                    services_config.repo, service_name, env
+                ),
+                name: service_name.to_string(),
             },
             services_config.lang,
-            &services_config.dir
+            &services_config.dir,
+            &base_url,
         );
     }
 }

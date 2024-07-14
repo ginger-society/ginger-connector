@@ -1,4 +1,4 @@
-use std::{path::Path, process::exit};
+use std::{collections::HashMap, path::Path, process::exit};
 
 use inquire::{InquireError, Select, Text};
 
@@ -21,7 +21,7 @@ pub fn initialize(repo: &String, config_path: &Path) {
                         lang: lang_selected,
                         dir: dir.clone(),
                         repo: repo.to_string(),
-                        services: Some(vec![]),
+                        services: Some(HashMap::new()),
                     };
                     match write_config_file(config_path, &config) {
                         Ok(_) => println!("Success!"),

@@ -1,4 +1,5 @@
-services = ["ServiceOne", "ServiceTwo"]
-lang = "TS"
 dir = "src/services"
-repo = "ginger-society/connector-repo"
+lang = "TS"
+repo = "ginger-society/metadata-repo"
+
+[services]
