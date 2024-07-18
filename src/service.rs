@@ -43,24 +43,57 @@ fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base
 
             match lang {
                 LANG::Rust => {
-                    println!("please add Service_client_name = {{ path = \"folder_name\" }} in cargo.toml file if not added");
+                    println!(
+                        "please add \n\n{} = {{ path = \"{}\" }}\n\n in cargo.toml file if not added",
+                        service.name, output_dir
+                    );
 
                     // Update lib.rs file
                     let lib_rs_path = format!("{}/src/lib.rs", output_dir);
-                    let lib_rs_content = format!(
-                        r#"
-use apis::configuration::Configuration;
+                    let mut lib_rs_content = "".to_string();
 
-pub fn get_configuration() -> Configuration {{
-    let config = Configuration {{
-        base_path: "{url}".to_string(),
-        ..Default::default()
-    }};
-    config
-}}
-"#,
-                        url = base_url
-                    );
+                    if Path::new("Rocket.toml").exists() {
+                        lib_rs_content = format!(
+                            r#"
+    use apis::configuration::Configuration;
+    
+    pub fn get_configuration() -> Configuration {{
+        let config = Configuration {{
+            base_path: "{url}".to_string(),
+            ..Default::default()
+        }};
+        config
+    }}
+    "#,
+                            url = base_url
+                        );
+                    } else {
+                        lib_rs_content = format!(
+                            r#"
+    
+    use std::{{env, process::exit}};
+    
+    use apis::configuration::{{ApiKey, Configuration}};
+    
+    pub fn get_configuration() -> Configuration {{
+        let token = env::var("GINGER_TOKEN").unwrap_or_else(|_| {{
+            println!("GINGER_TOKEN environment variable not set. Exiting.");
+            exit(1)
+        }});
+        let config = Configuration {{
+            base_path: "{url}".to_string(),
+            api_key: Some(ApiKey {{
+                key: token,
+                prefix: Some("".to_string()),
+            }}),
+            ..Default::default()
+        }};
+        config
+    }}
+    "#,
+                            url = base_url
+                        );
+                    }
 
                     let config_file_content = format!(
                         r#"
@@ -133,18 +166,20 @@ impl<'a> OpenApiFromRequest<'a> for {name}_config {{
                         name = service.name
                     );
 
-                    match OpenOptions::new()
-                        .write(true)
-                        .create(true)
-                        .truncate(true)
-                        .open(format!("src/middlewares/{}_config.rs", service.name))
-                    {
-                        Ok(mut file) => {
-                            if let Err(e) = file.write_all(config_file_content.as_bytes()) {
-                                eprintln!("Error writing to config.rs: {:?}", e);
+                    if Path::new("Rocket.toml").exists() {
+                        match OpenOptions::new()
+                            .write(true)
+                            .create(true)
+                            .truncate(true)
+                            .open(format!("src/middlewares/{}_config.rs", service.name))
+                        {
+                            Ok(mut file) => {
+                                if let Err(e) = file.write_all(config_file_content.as_bytes()) {
+                                    eprintln!("Error writing to config.rs: {:?}", e);
+                                }
                             }
+                            Err(e) => eprintln!("Error creating config.rs: {:?}", e),
                         }
-                        Err(e) => eprintln!("Error creating config.rs: {:?}", e),
                     }
 
                     match OpenOptions::new()

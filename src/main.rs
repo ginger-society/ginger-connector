@@ -6,6 +6,15 @@ use generate::generate_arbitrary_client;
 use init::initialize;
 use service::generate_client;
 use utils::{fetch_metadata_and_process, LANG};
+use IAMService::apis::configuration::Configuration as IAMConfiguration;
+use IAMService::{
+    apis::{configuration::Configuration, default_api::identity_validate_token},
+    get_configuration as get_iam_configuration,
+};
+use MetadataService::{
+    apis::configuration::Configuration as MetadataConfiguration,
+    get_configuration as get_metadata_configuration,
+};
 
 mod generate;
 mod init;
@@ -65,24 +74,46 @@ impl fmt::Display for Environment {
     }
 }
 
+#[tokio::main]
+async fn check_session_gurad(
+    cli: CLI,
+    config_path: &Path,
+    iam_config: &IAMConfiguration,
+    metadata_config: &MetadataConfiguration,
+) {
+    match identity_validate_token(&iam_config).await {
+        Ok(response) => {
+            match &cli.command {
+                Commands::Config {} => {
+                    fetch_metadata_and_process(config_path, &iam_config, &metadata_config).await;
+                }
+                Commands::Connect { env } => generate_client(config_path, env.clone()),
+                Commands::Init { repo_path } => initialize(repo_path, config_path),
+                Commands::Generate {
+                    lang,
+                    swagger_path,
+                    server_url,
+                    out_folder,
+                } => {
+                    generate_arbitrary_client(swagger_path, lang.clone(), server_url, out_folder);
+                }
+            };
+
+            println!("Token is valid: {:?}", response)
+        }
+        Err(error) => {
+            println!("Token validation failed: {:?}", error);
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let cli = CLI::parse();
 
     let config_path = Path::new("services.toml");
 
-    match &cli.command {
-        Commands::Config {} => {
-            fetch_metadata_and_process(config_path);
-        }
-        Commands::Connect { env } => generate_client(config_path, env.clone()),
-        Commands::Init { repo_path } => initialize(repo_path, config_path),
-        Commands::Generate {
-            lang,
-            swagger_path,
-            server_url,
-            out_folder,
-        } => {
-            generate_arbitrary_client(swagger_path, lang.clone(), server_url, out_folder);
-        }
-    };
+    let iam_config: IAMConfiguration = get_iam_configuration();
+    let metadata_config: MetadataConfiguration = get_metadata_configuration();
+    check_session_gurad(cli, config_path, &iam_config, &metadata_config);
 }
