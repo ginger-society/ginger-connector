@@ -1,6 +1,11 @@
 dir = "."
 lang = "Rust"
-repo = "ginger-society/metadata-repo"
+spec_url = "/openapi.json"
+
+[urls]
+dev = "http://localhost:8081"
+prod = "https://exampleapi.com"
+stage = "https://exampleapi.com"
 
 [services.MetadataService]
 dev = "http://localhost:8081"

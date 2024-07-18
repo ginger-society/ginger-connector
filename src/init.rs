@@ -4,7 +4,7 @@ use inquire::{InquireError, Select, Text};
 
 use crate::utils::{write_config_file, Config, LANG};
 
-pub fn initialize(repo: &String, config_path: &Path) {
+pub fn initialize(config_path: &Path) {
     let options = LANG::all();
 
     let ans: Result<LANG, InquireError> =
@@ -20,8 +20,9 @@ pub fn initialize(repo: &String, config_path: &Path) {
                     let config = Config {
                         lang: lang_selected,
                         dir: dir.clone(),
-                        repo: repo.to_string(),
                         services: Some(HashMap::new()),
+                        spec_url: "".to_string(),
+                        urls: HashMap::new(),
                     };
                     match write_config_file(config_path, &config) {
                         Ok(_) => println!("Success!"),

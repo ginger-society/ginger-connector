@@ -4,6 +4,7 @@ use std::path::Path;
 use clap::{Parser, Subcommand, ValueEnum};
 use generate::generate_arbitrary_client;
 use init::initialize;
+use publish::publish_metadata;
 use service::generate_client;
 use utils::{fetch_metadata_and_process, LANG};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
@@ -18,6 +19,7 @@ use MetadataService::{
 
 mod generate;
 mod init;
+mod publish;
 mod service;
 mod utils;
 
@@ -33,9 +35,11 @@ struct CLI {
 #[derive(Subcommand)]
 enum Commands {
     /// Fetch metadata and process it
-    Init {
-        #[clap(value_parser)]
-        repo_path: String,
+    Init,
+    /// publishes the project metadata to the metadata service
+    Publish {
+        #[clap(value_enum, default_value_t=Environment::Dev)]
+        env: Environment,
     },
     /// Configures a service to a project
     Config,
@@ -90,7 +94,7 @@ async fn check_session_gurad(
                 Commands::Connect { env } => {
                     generate_client(config_path, env.clone(), metadata_config).await
                 }
-                Commands::Init { repo_path } => initialize(repo_path, config_path),
+                Commands::Init => initialize(config_path),
                 Commands::Generate {
                     lang,
                     swagger_path,
@@ -98,6 +102,9 @@ async fn check_session_gurad(
                     out_folder,
                 } => {
                     generate_arbitrary_client(swagger_path, lang.clone(), server_url, out_folder);
+                }
+                Commands::Publish { env } => {
+                    publish_metadata(config_path, env.clone(), metadata_config).await
                 }
             };
 

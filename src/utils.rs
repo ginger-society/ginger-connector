@@ -52,7 +52,8 @@ pub struct Config {
     pub services: Option<HashMap<String, HashMap<String, String>>>,
     pub lang: LANG,
     pub dir: String,
-    pub repo: String,
+    pub spec_url: String,
+    pub urls: HashMap<String, String>,
 }
 
 pub fn read_config_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Error>> {
