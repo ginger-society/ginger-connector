@@ -1,11 +1,19 @@
 use std::{
-    fs::OpenOptions,
+    fs::{self, OpenOptions},
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     process::{exit, Command},
 };
 
 use colored::Colorize;
+use IAMService::apis::configuration::Configuration as IAMConfiguration;
+use MetadataService::apis::default_api::{
+    metadata_get_service_and_env_by_id, MetadataGetServiceAndEnvByIdParams,
+};
+use MetadataService::apis::{
+    configuration::Configuration as MetadataConfiguration,
+    default_api::{metadata_get_services_and_envs, MetadataGetServicesAndEnvsParams},
+};
 
 use crate::{
     utils::{read_config_file, Service, LANG},
@@ -14,7 +22,7 @@ use crate::{
 
 fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base_url: &str) {
     let output_dir = format!("{}/{}_client", root_dir, service.name);
-    println!("Generating client for: {}", service.name);
+    println!("Generating client for: {:?}", service);
 
     let output = Command::new("openapi-generator")
         .arg("generate")
@@ -38,7 +46,7 @@ fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base
                 .split('\n')
                 .into_iter()
             {
-                println!("{}", line)
+                println!("O: {}", line)
             }
 
             match lang {
@@ -265,7 +273,11 @@ fn print_openapi_generator_not_found() {
     exit(1);
 }
 
-pub fn generate_client(config_path: &Path, env: Environment) {
+pub async fn generate_client(
+    config_path: &Path,
+    env: Environment,
+    metadata_config: &MetadataConfiguration,
+) {
     match Command::new("java").arg("-version").output() {
         Ok(cmd_output) => {
             if !String::from_utf8(cmd_output.stderr)
@@ -308,6 +320,15 @@ pub fn generate_client(config_path: &Path, env: Environment) {
 
     println!("{:?}", services_config);
 
+    // Ensure .ginger.tmp directory exists
+    let ginger_tmp_dir = PathBuf::from(".ginger.tmp");
+    if !ginger_tmp_dir.exists() {
+        if let Err(e) = fs::create_dir(&ginger_tmp_dir) {
+            eprintln!("Error creating .ginger.tmp directory: {:?}", e);
+            exit(1);
+        }
+    }
+
     for (service_name, service_urls) in services_config.services.unwrap().iter() {
         let base_url = match env {
             Environment::Dev => service_urls["dev"].clone(),
@@ -315,12 +336,39 @@ pub fn generate_client(config_path: &Path, env: Environment) {
             Environment::Prod => service_urls["prod"].clone(),
         };
 
+        match metadata_get_service_and_env_by_id(
+            metadata_config,
+            MetadataGetServiceAndEnvByIdParams {
+                service_identifier: service_name.to_string(),
+                env: env.to_string(),
+            },
+        )
+        .await
+        {
+            Ok(response) => {
+                let spec_path = ginger_tmp_dir.join(format!("{}.{}.spec.json", service_name, env));
+                match OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(&spec_path)
+                {
+                    Ok(mut file) => {
+                        if let Err(e) = file.write_all(response.spec.as_bytes()) {
+                            eprintln!("Error writing to {}: {:?}", spec_path.display(), e);
+                        }
+                    }
+                    Err(e) => eprintln!("Error creating {}: {:?}", spec_path.display(), e),
+                }
+            }
+            Err(e) => {
+                println!("{:?}", e)
+            }
+        }
+
         open_api_client_generator(
             &Service {
-                schema_url: format!(
-                    "https://raw.githubusercontent.com/{}/main/{}/{}.json",
-                    services_config.repo, service_name, env
-                ),
+                schema_url: format!(".ginger.tmp/{}.{}.spec.json", service_name, env),
                 name: service_name.to_string(),
             },
             services_config.lang,

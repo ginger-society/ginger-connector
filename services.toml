@@ -1,7 +1,9 @@
-lang = "Rust"
 dir = "."
+lang = "Rust"
 repo = "ginger-society/metadata-repo"
 
-[services.backend-iam-1]
-dev = "http://localhost:8001"
-stage = "http://localhost:8002"
+[services.MetadataService]
+dev = "http://localhost:8081"
+
+[services.IAMService]
+dev = "http://localhost:8080"

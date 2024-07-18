@@ -87,7 +87,9 @@ async fn check_session_gurad(
                 Commands::Config {} => {
                     fetch_metadata_and_process(config_path, &iam_config, &metadata_config).await;
                 }
-                Commands::Connect { env } => generate_client(config_path, env.clone()),
+                Commands::Connect { env } => {
+                    generate_client(config_path, env.clone(), metadata_config).await
+                }
                 Commands::Init { repo_path } => initialize(repo_path, config_path),
                 Commands::Generate {
                     lang,
