@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use generate::generate_arbitrary_client;
 use init::initialize;
 use publish::publish_metadata;
-use service::generate_client;
+use service::{generate_client, generate_references};
 use utils::{fetch_metadata_and_process, LANG};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::{
@@ -45,6 +45,11 @@ enum Commands {
     Config,
     /// Connect to an environment
     Connect {
+        #[clap(value_enum, default_value_t=Environment::Dev)]
+        env: Environment,
+    },
+    /// Generates references to portals
+    Refer {
         #[clap(value_enum, default_value_t=Environment::Dev)]
         env: Environment,
     },
@@ -98,6 +103,7 @@ async fn check_session_gurad(
                 Commands::Connect { env } => {
                     generate_client(config_path, env.clone(), metadata_config).await
                 }
+                Commands::Refer { env } => generate_references(config_path, env.clone()),
                 Commands::Init => initialize(config_path),
                 Commands::Generate {
                     lang,

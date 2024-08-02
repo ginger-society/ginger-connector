@@ -18,6 +18,8 @@ use MetadataService::apis::{
     default_api::{metadata_get_services_and_envs, MetadataGetServicesAndEnvsParams},
 };
 
+use crate::publish::{get_cargo_toml_info, get_package_json_info};
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ORM {
     TypeORM,
@@ -90,8 +92,10 @@ impl LANG {
 #[derive(Deserialize, Debug, Serialize, Clone)]
 pub struct Config {
     pub services: Option<HashMap<String, HashMap<String, String>>>,
+    pub portals_refs: Option<HashMap<String, HashMap<String, String>>>,
     pub lang: LANG,
     pub dir: String,
+    pub portal_refs_file: Option<String>,
     pub spec_url: Option<String>,
     pub urls: Option<HashMap<String, String>>,
     pub override_name: Option<String>,
@@ -115,7 +119,7 @@ pub async fn fetch_metadata_and_process(
     metadata_config: &MetadataConfiguration,
 ) {
     let mut config = read_config_file(config_path).unwrap();
-
+    println!("{:?}", config);
     match metadata_get_services_and_envs(
         metadata_config,
         MetadataGetServicesAndEnvsParams {
@@ -128,6 +132,28 @@ pub async fn fetch_metadata_and_process(
         Ok(services) => {
             println!("{:?}", services);
 
+            let (mut current_package_name, version) = match config.lang {
+                LANG::TS => get_package_json_info().unwrap_or_else(|| {
+                    eprintln!("Failed to get name and version from package.json");
+                    exit(1);
+                }),
+                LANG::Rust => get_cargo_toml_info().unwrap_or_else(|| {
+                    eprintln!("Failed to get name and version from Cargo.toml");
+                    exit(1);
+                }),
+                LANG::Python => {
+                    // Implement similar logic for Python if needed
+                    unimplemented!()
+                }
+            };
+
+            if config.override_name.is_some() {
+                current_package_name = config.override_name.clone().unwrap()
+            }
+
+            println!("Package name: {}", current_package_name);
+            println!("Package version: {}", version);
+
             let service_selector_validator = |a: &[ListOption<&String>]| {
                 if a.len() < 1 {
                     return Ok(Validation::Invalid(
@@ -139,15 +165,34 @@ pub async fn fetch_metadata_and_process(
 
             let mut existing_services_namespace: Vec<usize> = vec![];
 
-            for (itter_count, service_name) in config.services.as_ref().unwrap().iter().enumerate()
-            {
-                if services.iter().any(|s| s.identifier == *service_name.0) {
-                    existing_services_namespace.push(itter_count);
+            let service_names: Vec<String> = services
+                .iter()
+                .filter(|s| s.identifier != current_package_name)
+                .map(|s| s.identifier.clone())
+                .collect();
+
+            // Collect default selections for both services and portals
+            for (index, service_name) in service_names.iter().enumerate() {
+                if config
+                    .services
+                    .as_ref()
+                    .map_or(false, |s| s.contains_key(service_name))
+                {
+                    existing_services_namespace.push(index);
+                } else if config
+                    .portals_refs
+                    .as_ref()
+                    .map_or(false, |p| p.contains_key(service_name))
+                {
+                    existing_services_namespace.push(index);
                 }
             }
 
-            let service_names: Vec<String> =
-                services.iter().map(|s| s.identifier.clone()).collect();
+            let service_names: Vec<String> = services
+                .iter()
+                .filter(|s| s.identifier != current_package_name)
+                .map(|s| s.identifier.clone())
+                .collect();
 
             let ans = MultiSelect::new(
                 "Select the services you want to add to this project ",
@@ -160,6 +205,9 @@ pub async fn fetch_metadata_and_process(
 
             let selected_services = ans.unwrap();
             let mut new_services = HashMap::new();
+
+            let mut new_portal_refs = HashMap::new();
+
             for service_name in selected_services.iter() {
                 if let Some(service) = services.iter().find(|s| &s.identifier == service_name) {
                     let envs: HashMap<String, String> = service
@@ -167,11 +215,27 @@ pub async fn fetch_metadata_and_process(
                         .iter()
                         .map(|env| (env.env_key.clone(), env.base_url.clone()))
                         .collect();
-                    new_services.insert(service_name.clone(), envs);
+
+                    match service.service_type.clone().unwrap().unwrap().as_str() {
+                        "Portal" => {
+                            new_portal_refs.insert(service_name.clone(), envs);
+                        }
+                        "RPCEndpoint" => {
+                            new_services.insert(service_name.clone(), envs);
+                        }
+                        _ => {
+                            println!(
+                                "Unknown service type for {}: {}",
+                                service_name,
+                                service.service_type.clone().unwrap().unwrap()
+                            );
+                        }
+                    }
                 }
             }
 
             config.services = Some(new_services);
+            config.portals_refs = Some(new_portal_refs);
 
             match write_config_file(config_path, &config) {
                 Ok(_) => println!("Configuration updated successfully"),

@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
     process::{exit, Command},
@@ -271,6 +271,90 @@ fn print_openapi_generator_not_found() {
         "npm install @openapitools/openapi-generator-cli -g".green()
     );
     exit(1);
+}
+
+pub fn generate_references(config_path: &Path, env: Environment) {
+    let services_config = match read_config_file(config_path) {
+        Ok(c) => c,
+        Err(err) => {
+            println!("{:?}", err);
+            println!(
+                "There is no service configuration found. Please use {} to add one. Exiting",
+                "ginger-connector init".blue()
+            );
+            exit(1);
+        }
+    };
+
+    // Process services and generate references content
+    let mut references_content = String::new();
+
+    // Ensure portal_refs_file is specified in the configuration
+    let portal_refs_file = match &services_config.portal_refs_file {
+        Some(file) => file,
+        None => {
+            println!("'portal_refs_file' is not specified in the configuration. Exiting.");
+            exit(1);
+        }
+    };
+
+    // Process portals_refs if available
+    if let Some(portals_refs) = &services_config.portals_refs {
+        for (portal_name, portal_envs) in portals_refs {
+            if let Some(portal_url) = portal_envs.get(&env.to_string()) {
+                let formatted_name = portal_name
+                    .replace("-", "_")
+                    .replace("@", "")
+                    .replace("/", "_")
+                    .to_uppercase();
+                references_content.push_str(&format!(
+                    "export const {} = '{}';\n",
+                    formatted_name, portal_url
+                ));
+            }
+        }
+    }
+
+    // Write the references content to the specified file
+    match File::create(portal_refs_file) {
+        Ok(mut file) => {
+            if let Err(err) = file.write_all(references_content.as_bytes()) {
+                println!("Failed to write to file '{}': {:?}", portal_refs_file, err);
+                exit(1);
+            }
+        }
+        Err(err) => {
+            println!("Failed to create file '{}': {:?}", portal_refs_file, err);
+            exit(1);
+        }
+    }
+
+    println!(
+        "References generated successfully in '{}'",
+        portal_refs_file
+    );
+
+    // Add portal_refs_file to .gitignore if it's not already present
+    let gitignore_path = Path::new(".gitignore");
+    let portal_refs_file_str = portal_refs_file.as_str();
+
+    if gitignore_path.exists() {
+        let gitignore_content = fs::read_to_string(gitignore_path).unwrap();
+        if !gitignore_content.contains(portal_refs_file_str) {
+            let mut gitignore_file = OpenOptions::new()
+                .append(true)
+                .open(gitignore_path)
+                .unwrap();
+            writeln!(gitignore_file, "\n{}", portal_refs_file_str).unwrap();
+            println!("Added '{}' to .gitignore", portal_refs_file_str);
+        } else {
+            println!("'{}' is already in .gitignore", portal_refs_file_str);
+        }
+    } else {
+        let mut gitignore_file = File::create(gitignore_path).unwrap();
+        writeln!(gitignore_file, "{}", portal_refs_file_str).unwrap();
+        println!("Created .gitignore and added '{}'", portal_refs_file_str);
+    }
 }
 
 pub async fn generate_client(

@@ -23,7 +23,7 @@ use MetadataService::{
     models::UpdateServiceRequest,
 };
 
-fn get_package_json_info() -> Option<(String, String)> {
+pub fn get_package_json_info() -> Option<(String, String)> {
     let mut file = File::open("package.json").expect("Failed to open package.json");
     let mut content = String::new();
     file.read_to_string(&mut content)
@@ -37,7 +37,7 @@ fn get_package_json_info() -> Option<(String, String)> {
     Some((name, version))
 }
 
-fn get_cargo_toml_info() -> Option<(String, String)> {
+pub fn get_cargo_toml_info() -> Option<(String, String)> {
     let cargo_toml_content = fs::read_to_string("Cargo.toml").expect("Failed to read Cargo.toml");
     let cargo_toml: Value =
         toml::from_str(&cargo_toml_content).expect("Failed to parse Cargo.toml");

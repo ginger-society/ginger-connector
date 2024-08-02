@@ -20,11 +20,13 @@ pub fn initialize(config_path: &Path) {
                     let config = Config {
                         lang: lang_selected,
                         dir: dir.clone(),
+                        portal_refs_file: None,
                         services: Some(HashMap::new()),
                         spec_url: Some("/openapi.json".to_string()),
                         urls: Some(HashMap::new()),
                         override_name: None,
                         service_type: None,
+                        portals_refs: Some(HashMap::new()),
                     };
                     match write_config_file(config_path, &config) {
                         Ok(_) => println!("Success!"),
