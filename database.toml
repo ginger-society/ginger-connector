@@ -1,0 +1,10 @@
+[schema]
+branch = "main"
+lang = "Rust"
+orm = "Diesel"
+root = "src/models"
+schema_id = "random-id-from-toml"
+url = "http://localhost:8001"
+
+[tables]
+names = ["dbschema", "dbschema_branch", "templates", "service", "service_envs"]

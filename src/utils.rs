@@ -2,8 +2,8 @@ use std::{
     collections::HashMap,
     error::Error,
     fmt,
-    fs::{self, OpenOptions},
-    io::Write,
+    fs::{self, File, OpenOptions},
+    io::{Read, Write},
     path::Path,
     process::{exit, Command},
 };
@@ -17,6 +17,46 @@ use MetadataService::apis::{
     configuration::Configuration as MetadataConfiguration,
     default_api::{metadata_get_services_and_envs, MetadataGetServicesAndEnvsParams},
 };
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ORM {
+    TypeORM,
+    SQLAlchemy,
+    DjangoORM,
+    Diesel,
+}
+
+impl fmt::Display for ORM {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ORM::TypeORM => write!(f, "TypeORM"),
+            ORM::SQLAlchemy => write!(f, "SQLAlchemy"),
+            ORM::DjangoORM => write!(f, "DjangoORM"),
+            ORM::Diesel => write!(f, "Diesel"),
+        }
+    }
+}
+
+#[derive(Deserialize, Debug, Serialize)]
+pub struct DBSchema {
+    pub url: String,
+    pub lang: LANG,
+    pub orm: ORM,
+    pub root: String,
+    pub schema_id: Option<String>,
+    pub branch: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Serialize)]
+pub struct DBTables {
+    pub names: Vec<String>,
+}
+
+#[derive(Deserialize, Debug, Serialize)]
+pub struct DBConfig {
+    pub schema: DBSchema,
+    pub tables: DBTables,
+}
 
 #[derive(Debug, Clone)]
 pub struct Service {
@@ -47,13 +87,15 @@ impl LANG {
     }
 }
 
-#[derive(Deserialize, Debug, Serialize)]
+#[derive(Deserialize, Debug, Serialize, Clone)]
 pub struct Config {
     pub services: Option<HashMap<String, HashMap<String, String>>>,
     pub lang: LANG,
     pub dir: String,
-    pub spec_url: String,
-    pub urls: HashMap<String, String>,
+    pub spec_url: Option<String>,
+    pub urls: Option<HashMap<String, String>>,
+    pub override_name: Option<String>,
+    pub service_type: Option<String>,
 }
 
 pub fn read_config_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Error>> {
@@ -136,9 +178,21 @@ pub async fn fetch_metadata_and_process(
                 Err(_) => println!("Could not save the config file. Please check if you have appropriate permission to write"),
             };
         }
-        Err(_) => {
+        Err(e) => {
+            println!("{:?}", e);
             println!("Unable to get the metadata for this template");
             exit(1)
         }
     };
+}
+
+pub fn read_db_config<P: AsRef<Path>>(path: P) -> Result<DBConfig, Box<dyn Error>> {
+    // Open the file
+    let mut file = File::open(path)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+
+    // Deserialize the TOML contents into the DBConfig struct
+    let config: DBConfig = toml::from_str(&contents)?;
+    Ok(config)
 }

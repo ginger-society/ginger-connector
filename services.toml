@@ -1,14 +1,16 @@
-dir = "."
 lang = "Rust"
+dir = "."
 spec_url = "/openapi.json"
 
-[urls]
-dev = "http://localhost:8081"
-prod = "https://exampleapi.com"
-stage = "https://exampleapi.com"
+[services.IAMService]
+stage = "https://api-staging.gingersociety.org/iam"
+stage_k8 = "http://iam-service-api-service/iam"
 
 [services.MetadataService]
-dev = "http://localhost:8081"
+stage_k8 = "http://metadata-service-api-service/metadata"
+stage = "https://api-staging.gingersociety.org/metadata"
 
-[services.IAMService]
-dev = "http://localhost:8080"
+[urls]
+stage = "https://exampleapi.com"
+dev = "http://localhost:8081"
+prod = "https://exampleapi.com"

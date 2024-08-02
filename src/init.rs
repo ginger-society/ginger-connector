@@ -21,8 +21,10 @@ pub fn initialize(config_path: &Path) {
                         lang: lang_selected,
                         dir: dir.clone(),
                         services: Some(HashMap::new()),
-                        spec_url: "".to_string(),
-                        urls: HashMap::new(),
+                        spec_url: Some("/openapi.json".to_string()),
+                        urls: Some(HashMap::new()),
+                        override_name: None,
+                        service_type: None,
                     };
                     match write_config_file(config_path, &config) {
                         Ok(_) => println!("Success!"),

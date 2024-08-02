@@ -66,6 +66,8 @@ enum Environment {
     Dev,
     Stage,
     Prod,
+    ProdK8,
+    StageK8,
 }
 
 impl fmt::Display for Environment {
@@ -74,6 +76,8 @@ impl fmt::Display for Environment {
             Environment::Dev => write!(f, "dev"),
             Environment::Stage => write!(f, "stage"),
             Environment::Prod => write!(f, "prod"),
+            Environment::ProdK8 => write!(f, "prod_k8"),
+            Environment::StageK8 => write!(f, "stage_k8"),
         }
     }
 }

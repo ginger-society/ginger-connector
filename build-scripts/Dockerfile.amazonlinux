@@ -1,0 +1,22 @@
+# Use Amazon Linux as the base image
+FROM amazonlinux:2023.2.20231011.0
+
+# Install necessary dependencies
+RUN yum update -y && \
+    yum install -y gcc openssl-devel libcurl-devel pkgconfig
+
+# Install Rust
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the entire project into the container
+COPY . .
+
+# Build the project
+RUN cargo build --release
+
+# Copy the resulting binary to a temporary location
+RUN cp target/release/ginger-connector /tmp/

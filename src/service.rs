@@ -309,7 +309,8 @@ pub async fn generate_client(
 
     let services_config = match read_config_file(config_path) {
         Ok(c) => c,
-        Err(_) => {
+        Err(err) => {
+            println!("{:?}", err);
             println!(
                 "There is no service configuration found. Please use {} to add one. Exiting",
                 "ginger-connector init".blue()
@@ -334,6 +335,8 @@ pub async fn generate_client(
             Environment::Dev => service_urls["dev"].clone(),
             Environment::Stage => service_urls["stage"].clone(),
             Environment::Prod => service_urls["prod"].clone(),
+            Environment::ProdK8 => service_urls["prod_k8"].clone(),
+            Environment::StageK8 => service_urls["stage_k8"].clone(),
         };
 
         match metadata_get_service_and_env_by_id(

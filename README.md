@@ -47,3 +47,16 @@ Now you must have `ServiceOne` folder in this repo with `dev.json` , `stage.json
 Question : Why cant we use the live URL of these swagger file, why it needs to be available in this repo as JSON. 
 
 Ans: We feel this is a better and error free mechanism. Your microservice should generate its swagger statically and update this repo. We are working on a tool/process to update.
+
+## Notes
+
+Build the binary for amazonlinux using the following commands
+
+```sh
+
+docker build -t ginger-connector . -f build-scripts/Dockerfile.amazonlinux
+docker create --name temp_container ginger-connector
+docker cp temp_container:/tmp/ginger-connector ./bin/
+docker rm temp_container
+
+```
