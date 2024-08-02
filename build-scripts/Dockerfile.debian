@@ -1,0 +1,22 @@
+# Use Debian as the base image
+FROM debian:bullseye-slim
+
+# Install necessary dependencies
+RUN apt update -y && \
+    apt install -y gcc libssl-dev libcurl4-openssl-dev pkg-config curl
+
+# Install Rust
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the entire project into the container
+COPY . .
+
+# Build the project
+RUN cargo build --release
+
+# Copy the resulting binary to a temporary location
+RUN cp target/release/ginger-connector /tmp/
