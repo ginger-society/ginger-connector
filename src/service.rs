@@ -24,7 +24,7 @@ fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base
     let output_dir = format!("{}/{}_client", root_dir, service.name);
     println!("Generating client for: {:?}", service);
 
-    let output = Command::new("openapi-generator")
+    let output = Command::new("openapi-generator-cli")
         .arg("generate")
         .arg("-g")
         .arg(lang.to_string())
@@ -362,35 +362,6 @@ pub async fn generate_client(
     env: Environment,
     metadata_config: &MetadataConfiguration,
 ) {
-    match Command::new("java").arg("-version").output() {
-        Ok(cmd_output) => {
-            if !String::from_utf8(cmd_output.stderr)
-                .unwrap()
-                .contains("java version")
-            {
-                println!("Java is not installed on your machine. Please use https://www.java.com/en/download/help/download_options.html to install Java first");
-                exit(1);
-            } else {
-                match Command::new("openapi-generator").arg("--version").output() {
-                    Ok(cmd_output) => {
-                        if !String::from_utf8(cmd_output.stdout)
-                            .unwrap()
-                            .contains("openapi-generator-cli")
-                        {
-                            print_openapi_generator_not_found();
-                        }
-                    }
-                    Err(_) => {
-                        print_openapi_generator_not_found();
-                    }
-                }
-            }
-        }
-        Err(err) => {
-            eprintln!("{:?}", err)
-        }
-    }
-
     let services_config = match read_config_file(config_path) {
         Ok(c) => c,
         Err(err) => {

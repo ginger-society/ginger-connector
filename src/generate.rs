@@ -13,7 +13,7 @@ pub fn generate_arbitrary_client(
         lang, swagger_path, server_url
     );
 
-    let output = Command::new("openapi-generator")
+    let output = Command::new("openapi-generator-cli")
         .arg("generate")
         .arg("-g")
         .arg(lang.to_string())

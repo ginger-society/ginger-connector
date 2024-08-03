@@ -1,0 +1,15 @@
+{
+  "name": "iam-fe",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "iam-fe",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "esbenp.prettier-vscode",
+        "unifiedjs.vscode-mdx",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  }
+}

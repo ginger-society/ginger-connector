@@ -54,9 +54,16 @@ Build the binary for amazonlinux using the following commands
 
 ```sh
 
-docker build -t ginger-connector . -f build-scripts/Dockerfile.amazonlinux
+docker build -t ginger-connector . -f build-scripts/Dockerfile.debian
+docker rm temp_container
 docker create --name temp_container ginger-connector
 docker cp temp_container:/tmp/ginger-connector ./bin/
 docker rm temp_container
+
+```
+
+```sh
+
+docker build -t ginger-connector . -f build-scripts/Dockerfile.debian --platform=linux/amd64
 
 ```
