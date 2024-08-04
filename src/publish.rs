@@ -51,6 +51,21 @@ pub fn get_cargo_toml_info() -> Option<(String, String)> {
     }
 }
 
+pub fn get_pyproject_toml_info() -> Option<(String, String)> {
+    let cargo_toml_content =
+        fs::read_to_string("pyproject.toml").expect("Failed to read pyproject.toml");
+    let cargo_toml: Value =
+        toml::from_str(&cargo_toml_content).expect("Failed to parse pyproject.toml");
+
+    if let Some(project) = cargo_toml.get("project") {
+        let name = project.get("name")?.as_str()?.to_string();
+        let version = project.get("version")?.as_str()?.to_string();
+        Some((name, version))
+    } else {
+        None
+    }
+}
+
 pub async fn publish_metadata(
     config_path: &Path,
     env: Environment,
@@ -58,9 +73,10 @@ pub async fn publish_metadata(
 ) {
     let services_config = match read_config_file(config_path) {
         Ok(c) => c,
-        Err(_) => {
+        Err(e) => {
+            println!("{:?}", e);
             println!(
-                "There is no service configuration found. Please use {} to add one. Exiting",
+                "There is no service configuration found or the existing one is invalid. Please use {} to add one. Exiting",
                 "ginger-connector init".blue()
             );
             exit(1);
@@ -77,10 +93,10 @@ pub async fn publish_metadata(
             eprintln!("Failed to get name and version from Cargo.toml");
             exit(1);
         }),
-        LANG::Python => {
-            // Implement similar logic for Python if needed
-            unimplemented!()
-        }
+        LANG::Python => get_pyproject_toml_info().unwrap_or_else(|| {
+            eprintln!("Failed to get name and version from pyproject.toml");
+            exit(1);
+        }),
     };
 
     if services_config.override_name.is_some() {

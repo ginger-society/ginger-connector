@@ -430,7 +430,7 @@ pub async fn generate_client(
                 name: service_name.to_string(),
             },
             services_config.lang,
-            &services_config.dir,
+            &services_config.dir.clone().unwrap(),
             &base_url,
         );
     }

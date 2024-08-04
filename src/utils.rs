@@ -94,7 +94,7 @@ pub struct Config {
     pub services: Option<HashMap<String, HashMap<String, String>>>,
     pub portals_refs: Option<HashMap<String, HashMap<String, String>>>,
     pub lang: LANG,
-    pub dir: String,
+    pub dir: Option<String>, // in case the project does not need any service integration
     pub portal_refs_file: Option<String>,
     pub spec_url: Option<String>,
     pub urls: Option<HashMap<String, String>>,

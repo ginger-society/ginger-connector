@@ -19,7 +19,7 @@ pub fn initialize(config_path: &Path) {
                 Ok(dir) => {
                     let config = Config {
                         lang: lang_selected,
-                        dir: dir.clone(),
+                        dir: Some(dir.clone()),
                         portal_refs_file: None,
                         services: Some(HashMap::new()),
                         spec_url: Some("/openapi.json".to_string()),
