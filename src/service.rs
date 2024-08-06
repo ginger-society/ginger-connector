@@ -24,10 +24,15 @@ fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base
     let output_dir = format!("{}/{}_client", root_dir, service.name);
     println!("Generating client for: {:?}", service);
 
+    let language = match lang {
+        LANG::TS => String::from("typescript-fetch"),
+        _ => lang.to_string(),
+    };
+
     let output = Command::new("openapi-generator-cli")
         .arg("generate")
         .arg("-g")
-        .arg(lang.to_string())
+        .arg(language)
         .arg("-o")
         .arg(&output_dir)
         .arg("--additional-properties")
@@ -287,7 +292,7 @@ pub fn generate_references(config_path: &Path, env: Environment) {
     };
 
     // Process services and generate references content
-    let mut references_content = String::new();
+    let mut references_content = format!("export const ENV_KEY=\"{env}\";\n");
 
     // Ensure portal_refs_file is specified in the configuration
     let portal_refs_file = match &services_config.portal_refs_file {
@@ -357,6 +362,22 @@ pub fn generate_references(config_path: &Path, env: Environment) {
     }
 }
 
+fn extract_org_and_package(input: &str) -> Option<(String, String)> {
+    // Check if the input starts with '@'
+    if input.starts_with('@') {
+        // Split the input on '/'
+        let parts: Vec<&str> = input.splitn(2, '/').collect();
+        if parts.len() == 2 {
+            // Extract and return org_id and package_name
+            let org_id = parts[0][1..].to_string(); // Remove the '@' character
+            let package_name = parts[1].to_string();
+            return Some((org_id, package_name));
+        }
+    }
+    // Return None if the input is not in the expected format
+    None
+}
+
 pub async fn generate_client(
     config_path: &Path,
     env: Environment,
@@ -394,44 +415,58 @@ pub async fn generate_client(
             Environment::StageK8 => service_urls["stage_k8"].clone(),
         };
 
-        match metadata_get_service_and_env_by_id(
-            metadata_config,
-            MetadataGetServiceAndEnvByIdParams {
-                service_identifier: service_name.to_string(),
-                env: env.to_string(),
-            },
-        )
-        .await
-        {
-            Ok(response) => {
-                let spec_path = ginger_tmp_dir.join(format!("{}.{}.spec.json", service_name, env));
-                match OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(&spec_path)
-                {
-                    Ok(mut file) => {
-                        if let Err(e) = file.write_all(response.spec.as_bytes()) {
-                            eprintln!("Error writing to {}: {:?}", spec_path.display(), e);
+        if let Some((org_id, package_name)) = extract_org_and_package(service_name) {
+            println!("org_id: {}, package_name: {}", org_id, package_name);
+            match metadata_get_service_and_env_by_id(
+                metadata_config,
+                MetadataGetServiceAndEnvByIdParams {
+                    service_identifier: package_name.clone(),
+                    env: env.to_string(),
+                    org_id: org_id.clone(),
+                },
+            )
+            .await
+            {
+                Ok(response) => {
+                    let spec_path = ginger_tmp_dir.join(format!(
+                        "{}@{}.{}.spec.json",
+                        package_name.clone(),
+                        org_id.clone(),
+                        env
+                    ));
+                    match OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .truncate(true)
+                        .open(&spec_path)
+                    {
+                        Ok(mut file) => {
+                            if let Err(e) = file.write_all(response.spec.as_bytes()) {
+                                eprintln!("Error writing to {}: {:?}", spec_path.display(), e);
+                            }
                         }
+                        Err(e) => eprintln!("Error creating {}: {:?}", spec_path.display(), e),
                     }
-                    Err(e) => eprintln!("Error creating {}: {:?}", spec_path.display(), e),
+                }
+                Err(e) => {
+                    println!("{:?}", e)
                 }
             }
-            Err(e) => {
-                println!("{:?}", e)
-            }
-        }
 
-        open_api_client_generator(
-            &Service {
-                schema_url: format!(".ginger.tmp/{}.{}.spec.json", service_name, env),
-                name: service_name.to_string(),
-            },
-            services_config.lang,
-            &services_config.dir.clone().unwrap(),
-            &base_url,
-        );
+            open_api_client_generator(
+                &Service {
+                    schema_url: format!(
+                        ".ginger.tmp/{}@{}.{}.spec.json",
+                        package_name, org_id, env
+                    ),
+                    name: package_name.to_string(),
+                },
+                services_config.lang,
+                &services_config.dir.clone().unwrap(),
+                &base_url,
+            );
+        } else {
+            println!("Input is not in the expected format");
+        }
     }
 }

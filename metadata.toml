@@ -1,0 +1,2 @@
+lang = "Rust"
+package_type = "executable"

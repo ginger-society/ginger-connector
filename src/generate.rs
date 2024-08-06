@@ -13,10 +13,15 @@ pub fn generate_arbitrary_client(
         lang, swagger_path, server_url
     );
 
+    let language = match lang {
+        LANG::TS => String::from("typescript-fetch"),
+        _ => lang.to_string(),
+    };
+
     let output = Command::new("openapi-generator-cli")
         .arg("generate")
         .arg("-g")
-        .arg(lang.to_string())
+        .arg(language)
         .arg("-o")
         .arg(&output_dir)
         .arg("--additional-properties")

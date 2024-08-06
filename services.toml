@@ -2,15 +2,18 @@ lang = "Rust"
 dir = "."
 spec_url = "/openapi.json"
 
-[services.IAMService]
-stage = "https://api-staging.gingersociety.org/iam"
+[services."@ginger-society/IAMService"]
 stage_k8 = "http://iam-service-api-service/iam"
+stage = "https://api-staging.gingersociety.org/iam"
 
-[services.MetadataService]
-stage_k8 = "http://metadata-service-api-service/metadata"
+[services."@ginger-society/MetadataService"]
 stage = "https://api-staging.gingersociety.org/metadata"
+dev = "http://localhost:8081/metadata"
+stage_k8 = "http://metadata-service-api-service/metadata"
+
+[portals_refs]
 
 [urls]
+prod = "https://exampleapi.com"
 stage = "https://exampleapi.com"
 dev = "http://localhost:8081"
-prod = "https://exampleapi.com"

@@ -4,7 +4,7 @@ version = 3
 
 [[package]]
 name = "IAMService"
-version = "0.4.0-nightly.0"
+version = "0.5.0-nightly.0"
 dependencies = [
  "reqwest",
  "serde",
@@ -16,7 +16,7 @@ dependencies = [
 
 [[package]]
 name = "MetadataService"
-version = "0.6.0-nightly.0"
+version = "0.3.0-nightly.0"
 dependencies = [
  "reqwest",
  "serde",

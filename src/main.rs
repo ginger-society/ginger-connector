@@ -6,7 +6,7 @@ use generate::generate_arbitrary_client;
 use init::initialize;
 use publish::publish_metadata;
 use service::{generate_client, generate_references};
-use utils::{fetch_metadata_and_process, LANG};
+use utils::{fetch_metadata_and_process, register_package, LANG};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::{
     apis::{configuration::Configuration, default_api::identity_validate_token},
@@ -41,6 +41,8 @@ enum Commands {
         #[clap(value_enum, default_value_t=Environment::Dev)]
         env: Environment,
     },
+    /// Register a package
+    Register,
     /// Configures a service to a project
     Config,
     /// Connect to an environment
@@ -66,7 +68,7 @@ enum Commands {
     },
 }
 
-#[derive(ValueEnum, Clone)]
+#[derive(ValueEnum, Clone, PartialEq)]
 enum Environment {
     Dev,
     Stage,
@@ -93,12 +95,16 @@ async fn check_session_gurad(
     config_path: &Path,
     iam_config: &IAMConfiguration,
     metadata_config: &MetadataConfiguration,
+    package_path: &Path,
 ) {
     match identity_validate_token(&iam_config).await {
         Ok(response) => {
             match &cli.command {
                 Commands::Config {} => {
                     fetch_metadata_and_process(config_path, &iam_config, &metadata_config).await;
+                }
+                Commands::Register {} => {
+                    register_package(package_path, &iam_config, &metadata_config).await
                 }
                 Commands::Connect { env } => {
                     generate_client(config_path, env.clone(), metadata_config).await
@@ -131,8 +137,15 @@ fn main() {
     let cli = CLI::parse();
 
     let config_path = Path::new("services.toml");
+    let package_path = Path::new("metadata.toml");
 
     let iam_config: IAMConfiguration = get_iam_configuration();
     let metadata_config: MetadataConfiguration = get_metadata_configuration();
-    check_session_gurad(cli, config_path, &iam_config, &metadata_config);
+    check_session_gurad(
+        cli,
+        config_path,
+        &iam_config,
+        &metadata_config,
+        package_path,
+    );
 }

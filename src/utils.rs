@@ -13,12 +13,18 @@ use colored::Colorize;
 use inquire::{list_option::ListOption, validator::Validation, MultiSelect};
 use serde::{Deserialize, Serialize};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
-use MetadataService::apis::{
-    configuration::Configuration as MetadataConfiguration,
-    default_api::{metadata_get_services_and_envs, MetadataGetServicesAndEnvsParams},
+use MetadataService::{
+    apis::{
+        configuration::Configuration as MetadataConfiguration,
+        default_api::{
+            metadata_create_or_update_package, metadata_get_services_and_envs,
+            MetadataCreateOrUpdatePackageParams, MetadataGetServicesAndEnvsParams,
+        },
+    },
+    models::CreateOrUpdatePackageRequest,
 };
 
-use crate::publish::{get_cargo_toml_info, get_package_json_info};
+use crate::publish::{get_cargo_toml_info, get_package_json_info, get_pyproject_toml_info};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ORM {
@@ -77,7 +83,7 @@ impl fmt::Display for LANG {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LANG::Rust => write!(f, "rust"),
-            LANG::TS => write!(f, "typescript-fetch"),
+            LANG::TS => write!(f, "typescript"),
             LANG::Python => write!(f, "python"),
         }
     }
@@ -102,9 +108,23 @@ pub struct Config {
     pub service_type: Option<String>,
 }
 
+#[derive(Deserialize, Debug, Serialize, Clone)]
+pub struct PackageMetadata {
+    pub lang: LANG,
+    pub package_type: String,
+}
+
 pub fn read_config_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Error>> {
     let content = fs::read_to_string(path)?;
     let config: Config = toml::from_str(&content)?;
+    Ok(config)
+}
+
+pub fn read_package_metadata_file<P: AsRef<Path>>(
+    path: P,
+) -> Result<PackageMetadata, Box<dyn Error>> {
+    let content = fs::read_to_string(path)?;
+    let config: PackageMetadata = toml::from_str(&content)?;
     Ok(config)
 }
 
@@ -113,6 +133,54 @@ pub fn write_config_file<P: AsRef<Path>>(path: P, config: &Config) -> Result<(),
     fs::write(path, content)?;
     Ok(())
 }
+
+pub async fn register_package(
+    package_path: &Path,
+    iam_config: &IAMConfiguration,
+    metadata_config: &MetadataConfiguration,
+) {
+    let metadata_details = read_package_metadata_file(package_path).unwrap();
+
+    let (mut name, version, description, organization) = match metadata_details.lang {
+        LANG::TS => get_package_json_info().unwrap_or_else(|| {
+            eprintln!("Failed to get name and version from package.json");
+            exit(1);
+        }),
+        LANG::Rust => get_cargo_toml_info().unwrap_or_else(|| {
+            eprintln!("Failed to get name and version from Cargo.toml");
+            exit(1);
+        }),
+        LANG::Python => get_pyproject_toml_info().unwrap_or_else(|| {
+            eprintln!("Failed to get name and version from pyproject.toml");
+            exit(1);
+        }),
+    };
+
+    match metadata_create_or_update_package(
+        metadata_config,
+        MetadataCreateOrUpdatePackageParams {
+            create_or_update_package_request: CreateOrUpdatePackageRequest {
+                identifier: name,
+                package_type: metadata_details.package_type,
+                lang: metadata_details.lang.to_string(),
+                version,
+                organization_id: organization,
+                description,
+            },
+        },
+    )
+    .await
+    {
+        Ok(response) => {
+            println!("{:?}", response);
+        }
+        Err(e) => {
+            println!("{:?}", e);
+            println!("Unable to register this package")
+        }
+    };
+}
+
 pub async fn fetch_metadata_and_process(
     config_path: &Path,
     iam_config: &IAMConfiguration,
@@ -132,7 +200,7 @@ pub async fn fetch_metadata_and_process(
         Ok(services) => {
             println!("{:?}", services);
 
-            let (mut current_package_name, version) = match config.lang {
+            let (mut current_package_name, version, description, organization) = match config.lang {
                 LANG::TS => get_package_json_info().unwrap_or_else(|| {
                     eprintln!("Failed to get name and version from package.json");
                     exit(1);
@@ -153,6 +221,8 @@ pub async fn fetch_metadata_and_process(
 
             println!("Package name: {}", current_package_name);
             println!("Package version: {}", version);
+            println!("Package organization: {}", organization);
+            println!("Package description: {}", description);
 
             let service_selector_validator = |a: &[ListOption<&String>]| {
                 if a.len() < 1 {
@@ -191,7 +261,7 @@ pub async fn fetch_metadata_and_process(
             let service_names: Vec<String> = services
                 .iter()
                 .filter(|s| s.identifier != current_package_name)
-                .map(|s| s.identifier.clone())
+                .map(|s| format!("@{}/{}", s.organization_id.clone(), s.identifier.clone()))
                 .collect();
 
             let ans = MultiSelect::new(
@@ -204,12 +274,16 @@ pub async fn fetch_metadata_and_process(
             .prompt();
 
             let selected_services = ans.unwrap();
+            println!("{:?}", selected_services);
             let mut new_services = HashMap::new();
 
             let mut new_portal_refs = HashMap::new();
 
             for service_name in selected_services.iter() {
-                if let Some(service) = services.iter().find(|s| &s.identifier == service_name) {
+                if let Some(service) = services
+                    .iter()
+                    .find(|s| format!("@{}/{}", &s.organization_id, &s.identifier) == *service_name)
+                {
                     let envs: HashMap<String, String> = service
                         .envs
                         .iter()
@@ -233,7 +307,7 @@ pub async fn fetch_metadata_and_process(
                     }
                 }
             }
-
+            println!("{:?}", new_services);
             config.services = Some(new_services);
             config.portals_refs = Some(new_portal_refs);
 
