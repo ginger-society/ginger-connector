@@ -1,5 +1,5 @@
 [schema]
-branch = "main"
+branch = "stage"
 lang = "Rust"
 orm = "Diesel"
 root = "src/models"

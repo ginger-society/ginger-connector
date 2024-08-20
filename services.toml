@@ -3,17 +3,18 @@ dir = "."
 spec_url = "/openapi.json"
 
 [services."@ginger-society/IAMService"]
-stage_k8 = "http://iam-service-api-service/iam"
 stage = "https://api-staging.gingersociety.org/iam"
+stage_k8 = "http://iam-service-api-service/iam"
+dev = "http://localhost:8080/iam"
 
 [services."@ginger-society/MetadataService"]
-stage = "https://api-staging.gingersociety.org/metadata"
 dev = "http://localhost:8081/metadata"
+stage = "https://api-staging.gingersociety.org/metadata"
 stage_k8 = "http://metadata-service-api-service/metadata"
 
 [portals_refs]
 
 [urls]
+dev = "http://localhost:8081"
 prod = "https://exampleapi.com"
 stage = "https://exampleapi.com"
-dev = "http://localhost:8081"

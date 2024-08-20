@@ -6,7 +6,7 @@ use generate::generate_arbitrary_client;
 use init::initialize;
 use publish::publish_metadata;
 use service::{generate_client, generate_references};
-use utils::{fetch_metadata_and_process, register_package, LANG};
+use utils::{fetch_metadata_and_process, register_package, update_pipeline, LANG};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::{
     apis::{configuration::Configuration, default_api::identity_validate_token},
@@ -42,13 +42,22 @@ enum Commands {
         env: Environment,
     },
     /// Register a package
-    Register,
+    Register {
+        #[clap(value_enum, default_value_t=Environment::Dev)]
+        env: Environment,
+    },
     /// Configures a service to a project
     Config,
     /// Connect to an environment
     Connect {
         #[clap(value_enum, default_value_t=Environment::Dev)]
         env: Environment,
+    },
+    UpdatePipeline {
+        #[clap(value_enum, default_value_t=Environment::Dev)]
+        env: Environment,
+        #[clap(value_parser)]
+        status: String,
     },
     /// Generates references to portals
     Refer {
@@ -96,6 +105,7 @@ async fn check_session_gurad(
     iam_config: &IAMConfiguration,
     metadata_config: &MetadataConfiguration,
     package_path: &Path,
+    releaser_path: &Path,
 ) {
     match identity_validate_token(&iam_config).await {
         Ok(response) => {
@@ -103,8 +113,16 @@ async fn check_session_gurad(
                 Commands::Config {} => {
                     fetch_metadata_and_process(config_path, &iam_config, &metadata_config).await;
                 }
-                Commands::Register {} => {
-                    register_package(package_path, &iam_config, &metadata_config).await
+                Commands::Register { env } => {
+                    register_package(
+                        package_path,
+                        &iam_config,
+                        &metadata_config,
+                        config_path,
+                        env.clone(),
+                        releaser_path,
+                    )
+                    .await
                 }
                 Commands::Connect { env } => {
                     generate_client(config_path, env.clone(), metadata_config).await
@@ -120,7 +138,18 @@ async fn check_session_gurad(
                     generate_arbitrary_client(swagger_path, lang.clone(), server_url, out_folder);
                 }
                 Commands::Publish { env } => {
-                    publish_metadata(config_path, env.clone(), metadata_config).await
+                    publish_metadata(config_path, env.clone(), metadata_config, releaser_path).await
+                }
+                Commands::UpdatePipeline { env, status } => {
+                    update_pipeline(
+                        package_path,
+                        &iam_config,
+                        &metadata_config,
+                        config_path,
+                        env.clone(),
+                        status.clone(),
+                    )
+                    .await
                 }
             };
 
@@ -138,6 +167,7 @@ fn main() {
 
     let config_path = Path::new("services.toml");
     let package_path = Path::new("metadata.toml");
+    let releaser_path = Path::new("releaser.toml");
 
     let iam_config: IAMConfiguration = get_iam_configuration();
     let metadata_config: MetadataConfiguration = get_metadata_configuration();
@@ -147,5 +177,6 @@ fn main() {
         &iam_config,
         &metadata_config,
         package_path,
+        releaser_path,
     );
 }

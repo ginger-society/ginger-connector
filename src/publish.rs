@@ -1,5 +1,8 @@
 use crate::{
-    utils::{read_config_file, read_db_config, Service, LANG},
+    utils::{
+        read_config_file, read_db_config, read_releaser_config_file, ReleaserConfig,
+        ReleaserSettings, Service, LANG,
+    },
     Environment,
 };
 use colored::Colorize;
@@ -24,7 +27,7 @@ use MetadataService::{
     models::UpdateServiceRequest,
 };
 
-pub fn get_package_json_info() -> Option<(String, String, String, String)> {
+pub fn get_package_json_info() -> Option<(String, String, String, String, Vec<String>)> {
     let mut file = File::open("package.json").expect("Failed to open package.json");
     let mut content = String::new();
     file.read_to_string(&mut content)
@@ -53,10 +56,40 @@ pub fn get_package_json_info() -> Option<(String, String, String, String)> {
         println!("The package name should be of format @scope/pkg-name");
         exit(1);
     };
-    Some((package_name, version, description, organization))
+
+    // Internal dependencies logic
+    let prefix = format!("@{}/", organization);
+    let mut internal_dependencies = Vec::new();
+
+    if let Some(dependencies) = package_json.get("dependencies").and_then(|d| d.as_object()) {
+        for (key, _) in dependencies {
+            if key.starts_with(&prefix) {
+                internal_dependencies.push(key.clone());
+            }
+        }
+    }
+
+    if let Some(dev_dependencies) = package_json
+        .get("devDependencies")
+        .and_then(|d| d.as_object())
+    {
+        for (key, _) in dev_dependencies {
+            if key.starts_with(&prefix) {
+                internal_dependencies.push(key.clone());
+            }
+        }
+    }
+
+    Some((
+        package_name,
+        version,
+        description,
+        organization,
+        internal_dependencies,
+    ))
 }
 
-pub fn get_cargo_toml_info() -> Option<(String, String, String, String)> {
+pub fn get_cargo_toml_info() -> Option<(String, String, String, String, Vec<String>)> {
     let cargo_toml_content = fs::read_to_string("Cargo.toml").expect("Failed to read Cargo.toml");
     let cargo_toml: Value =
         toml::from_str(&cargo_toml_content).expect("Failed to parse Cargo.toml");
@@ -72,13 +105,13 @@ pub fn get_cargo_toml_info() -> Option<(String, String, String, String)> {
             .expect("there is no metadata field in your cargo.toml");
         let organization = metadata.get("organization")?.as_str()?.to_string();
 
-        Some((name, version, description, organization))
+        Some((name, version, description, organization, Vec::new()))
     } else {
         None
     }
 }
 
-pub fn get_pyproject_toml_info() -> Option<(String, String, String, String)> {
+pub fn get_pyproject_toml_info() -> Option<(String, String, String, String, Vec<String>)> {
     let pyproject_toml_content =
         fs::read_to_string("pyproject.toml").expect("Failed to read pyproject.toml");
     let pyproject_toml: Value =
@@ -90,7 +123,7 @@ pub fn get_pyproject_toml_info() -> Option<(String, String, String, String)> {
         let description = project.get("description")?.as_str()?.to_string();
         let organization = project.get("organization")?.as_str()?.to_string();
 
-        Some((name, version, description, organization))
+        Some((name, version, description, organization, Vec::new()))
     } else {
         None
     }
@@ -138,6 +171,7 @@ pub async fn publish_metadata(
     config_path: &Path,
     env: Environment,
     metadata_config: &MetadataConfiguration,
+    releaser_path: &Path,
 ) {
     let services_config = match read_config_file(config_path) {
         Ok(c) => c,
@@ -152,7 +186,19 @@ pub async fn publish_metadata(
     };
     println!("{:?}", services_config);
 
-    let (mut name, version, description, organization) = match services_config.lang {
+    let releaser_config = match read_releaser_config_file(releaser_path) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("{:?}", e);
+            ReleaserConfig {
+                settings: ReleaserSettings {
+                    git_url_prefix: None,
+                },
+            }
+        }
+    };
+
+    let (mut name, version, description, organization, dependencies) = match services_config.lang {
         LANG::TS => get_package_json_info().unwrap_or_else(|| {
             eprintln!("Failed to get name and version from package.json");
             exit(1);
@@ -175,6 +221,7 @@ pub async fn publish_metadata(
     println!("Package version: {}", version);
     println!("Package organization: {}", organization);
     println!("Package description: {}", description);
+    println!("git: {:?}", releaser_config.settings.git_url_prefix);
 
     let client = Client::new();
     let env_base_url_swagger = match env {
@@ -215,8 +262,10 @@ pub async fn publish_metadata(
         Err(_) => (vec![], None),
     };
 
-    let dependencies_list = services_config.services.unwrap().keys().cloned().collect();
-
+    let mut dependencies_list: Vec<String> =
+        services_config.services.unwrap().keys().cloned().collect();
+    dependencies_list.extend(dependencies);
+    println!("{:?}", dependencies_list);
     match metadata_update_or_create_service(
         metadata_config,
         MetadataUpdateOrCreateServiceParams {
@@ -240,6 +289,7 @@ pub async fn publish_metadata(
                 ),
                 description: description,
                 organization_id: organization,
+                repo_origin: Some(releaser_config.settings.git_url_prefix),
             },
         },
     )
