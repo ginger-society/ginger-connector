@@ -311,8 +311,6 @@ pub async fn register_package(
         },
     };
 
-    println!("{:?}", releaser_config);
-
     let mut dependencies_list: Vec<String> =
         services_config.services.unwrap().keys().cloned().collect();
 
@@ -331,6 +329,8 @@ pub async fn register_package(
                 exit(1);
             }),
         };
+
+    println!("{:?} {:?}", releaser_config, version);
 
     dependencies_list.extend(internal_dependencies);
 

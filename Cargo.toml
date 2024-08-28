@@ -1,5 +1,5 @@
 [package]
-description = "connector cli"
+description = "ginger connector cli"
 edition = "2021"
 name = "ginger-connector"
 version = "0.7.0-nightly.0"

@@ -117,16 +117,12 @@ pub fn get_pyproject_toml_info() -> Option<(String, String, String, String, Vec<
     let pyproject_toml: Value =
         toml::from_str(&pyproject_toml_content).expect("Failed to parse pyproject.toml");
 
-    if let Some(project) = pyproject_toml.get("project") {
-        let name = project.get("name")?.as_str()?.to_string();
-        let version = project.get("version")?.as_str()?.to_string();
-        let description = project.get("description")?.as_str()?.to_string();
-        let organization = project.get("organization")?.as_str()?.to_string();
+    let name = pyproject_toml.get("name")?.as_str()?.to_string();
+    let version = pyproject_toml.get("version")?.as_str()?.to_string();
+    let description = pyproject_toml.get("description")?.as_str()?.to_string();
+    let organization = pyproject_toml.get("organization")?.as_str()?.to_string();
 
-        Some((name, version, description, organization, Vec::new()))
-    } else {
-        None
-    }
+    Some((name, version, description, organization, Vec::new()))
 }
 
 async fn fetch_swagger_spec(
