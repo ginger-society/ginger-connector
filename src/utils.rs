@@ -18,15 +18,21 @@ use MetadataService::{
     apis::{
         configuration::Configuration as MetadataConfiguration,
         default_api::{
-            metadata_create_or_update_package, metadata_get_services_and_envs,
-            metadata_update_pipeline_status, MetadataCreateOrUpdatePackageParams,
-            MetadataGetServicesAndEnvsParams, MetadataUpdatePipelineStatusParams,
+            metadata_create_dbschema, metadata_create_or_update_package,
+            metadata_get_services_and_envs, metadata_update_dbschema,
+            metadata_update_pipeline_status, MetadataCreateDbschemaParams,
+            MetadataCreateOrUpdatePackageParams, MetadataGetServicesAndEnvsParams,
+            MetadataUpdateDbschemaParams, MetadataUpdatePipelineStatusParams,
         },
     },
-    models::{CreateOrUpdatePackageRequest, PipelineStatusUpdateRequest},
+    models::{
+        CreateDbschemaRequest, CreateOrUpdatePackageRequest, PipelineStatusUpdateRequest,
+        UpdateDbschemaRequest,
+    },
 };
 
 use crate::{
+    db_utils::{read_db_config_v2, write_db_config_v2},
     publish::{get_cargo_toml_info, get_package_json_info, get_pyproject_toml_info},
     Environment,
 };
@@ -57,6 +63,7 @@ pub struct DBSchema {
     pub orm: ORM,
     pub root: String,
     pub schema_id: Option<String>,
+    pub cache_schema_id: Option<String>,
     pub branch: Option<String>,
 }
 
@@ -105,6 +112,7 @@ pub struct Config {
     pub services: Option<HashMap<String, HashMap<String, String>>>,
     pub portals_refs: Option<HashMap<String, HashMap<String, String>>>,
     pub lang: LANG,
+    pub organization_id: String,
     pub dir: Option<String>, // in case the project does not need any service integration
     pub portal_refs_file: Option<String>,
     pub spec_url: Option<String>,
@@ -281,6 +289,71 @@ pub async fn update_pipeline(
     }
 }
 
+pub async fn register_db(metadata_config: &MetadataConfiguration) {
+    let mut db_config = match read_db_config_v2("db-compose.toml") {
+        Ok(config) => config,
+        Err(err) => {
+            eprintln!("Error reading db-compose.toml: {:?}", err);
+            return;
+        }
+    };
+
+    // Iterate over all the databases in the configuration
+    for db in &mut db_config.database {
+        match &db.id {
+            Some(id) => {
+                println!("Database '{}' has ID: {}", db.name, id);
+
+                match metadata_update_dbschema(
+                    &metadata_config,
+                    MetadataUpdateDbschemaParams {
+                        update_dbschema_request: UpdateDbschemaRequest {
+                            name: db.name.clone(),
+                            description: Some(Some(db.description.clone())),
+                            organisation_id: db_config.organization_id.clone(),
+                        },
+                        schema_id: db.id.clone().unwrap(),
+                    },
+                )
+                .await
+                {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("{:?}", e);
+                    }
+                };
+            }
+            None => {
+                println!("Database '{}' is missing an ID", db.name);
+                match metadata_create_dbschema(
+                    &metadata_config,
+                    MetadataCreateDbschemaParams {
+                        create_dbschema_request: CreateDbschemaRequest {
+                            name: db.name.clone(),
+                            description: Some(Some(db.description.clone())),
+                            data: None,
+                            organisation_id: db_config.organization_id.clone(),
+                            db_type: db.db_type.to_string(),
+                        },
+                    },
+                )
+                .await
+                {
+                    Ok(resp) => {
+                        // println!("Success : {:?}", resp.identifier)
+                        db.id = Some(resp.identifier.clone());
+                    }
+                    Err(err) => {
+                        print!("{:?}", err)
+                    }
+                }
+            }
+        }
+    }
+
+    write_db_config_v2("db-compose.toml", &db_config).unwrap();
+}
+
 pub async fn register_package(
     package_path: &Path,
     iam_config: &IAMConfiguration,
@@ -374,6 +447,7 @@ pub async fn fetch_metadata_and_process(
         MetadataGetServicesAndEnvsParams {
             page_number: Some("1".to_string()),
             page_size: Some("50".to_string()),
+            org_id: config.organization_id.clone(),
         },
     )
     .await

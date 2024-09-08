@@ -88,17 +88,28 @@ fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base
     
     use apis::configuration::{{ApiKey, Configuration}};
     
-    pub fn get_configuration() -> Configuration {{
-        let token = env::var("GINGER_TOKEN").unwrap_or_else(|_| {{
-            println!("GINGER_TOKEN environment variable not set. Exiting.");
-            exit(1)
-        }});
+    pub fn get_configuration(token_arg: Option<String>) -> Configuration {{
+        let token = match token_arg {{
+            Some(t) => t,
+
+            None => env::var("GINGER_API_TOKEN").unwrap_or_else(|_| {{
+                println!("GINGER_API_TOKEN environment variable not set. Exiting.");
+                exit(1)
+            }}),
+        }};
         let config = Configuration {{
             base_path: "{url}".to_string(),
             api_key: Some(ApiKey {{
                 key: token,
                 prefix: Some("".to_string()),
             }}),
+            ..Default::default()
+        }};
+        config
+    }}
+    pub fn get_configuration_without_auth() -> Configuration {{
+        let config = Configuration {{
+            base_path: "{url}".to_string(),
             ..Default::default()
         }};
         config

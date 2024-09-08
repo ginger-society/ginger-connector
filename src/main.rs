@@ -1,13 +1,19 @@
 use core::fmt;
-use std::path::Path;
+use std::env;
+use std::fs::File;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::process::exit;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use generate::generate_arbitrary_client;
 use init::initialize;
 use publish::publish_metadata;
+use serde_json::Value;
 use service::{generate_client, generate_references};
-use utils::{fetch_metadata_and_process, register_package, update_pipeline, LANG};
+use utils::{fetch_metadata_and_process, register_db, register_package, update_pipeline, LANG};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
+use IAMService::apis::default_api::identity_validate_api_token;
 use IAMService::{
     apis::{configuration::Configuration, default_api::identity_validate_token},
     get_configuration as get_iam_configuration,
@@ -17,6 +23,7 @@ use MetadataService::{
     get_configuration as get_metadata_configuration,
 };
 
+mod db_utils;
 mod generate;
 mod init;
 mod publish;
@@ -107,22 +114,27 @@ async fn check_session_gurad(
     package_path: &Path,
     releaser_path: &Path,
 ) {
-    match identity_validate_token(&iam_config).await {
+    match identity_validate_api_token(&iam_config).await {
         Ok(response) => {
             match &cli.command {
                 Commands::Config {} => {
                     fetch_metadata_and_process(config_path, &iam_config, &metadata_config).await;
                 }
                 Commands::Register { env } => {
-                    register_package(
-                        package_path,
-                        &iam_config,
-                        &metadata_config,
-                        config_path,
-                        env.clone(),
-                        releaser_path,
-                    )
-                    .await
+                    if !Path::new("db-compose.toml").exists() {
+                        println!("db-compose.toml not found. Running the register command.");
+                        register_package(
+                            package_path,
+                            &iam_config,
+                            &metadata_config,
+                            config_path,
+                            env.clone(),
+                            releaser_path,
+                        )
+                        .await
+                    } else {
+                        register_db(&metadata_config).await;
+                    }
                 }
                 Commands::Connect { env } => {
                     generate_client(config_path, env.clone(), metadata_config).await
@@ -169,8 +181,52 @@ fn main() {
     let package_path = Path::new("metadata.toml");
     let releaser_path = Path::new("releaser.toml");
 
-    let iam_config: IAMConfiguration = get_iam_configuration();
-    let metadata_config: MetadataConfiguration = get_metadata_configuration();
+    let home_dir = match dirs::home_dir() {
+        Some(path) => path,
+        None => {
+            println!("Failed to locate home directory. Exiting.");
+            exit(1);
+        }
+    };
+
+    // Construct the path to the auth.json file
+    let auth_file_path: PathBuf = [home_dir.to_str().unwrap(), ".ginger-society", "auth.json"]
+        .iter()
+        .collect();
+
+    // Read the token from the file
+    let mut file = match File::open(&auth_file_path) {
+        Ok(f) => f,
+        Err(_) => {
+            println!("Failed to open {}. Exiting.", auth_file_path.display());
+            exit(1);
+        }
+    };
+    let mut contents = String::new();
+    if let Err(_) = file.read_to_string(&mut contents) {
+        println!("Failed to read the auth.json file. Exiting.");
+        exit(1);
+    }
+
+    let json: Value = match serde_json::from_str(&contents) {
+        Ok(v) => v,
+        Err(_) => {
+            println!("Failed to parse auth.json as JSON. Exiting.");
+            exit(1);
+        }
+    };
+
+    let token = match json.get("API_TOKEN").and_then(|v| v.as_str()) {
+        Some(t) => t.to_string(),
+        None => {
+            println!("API_TOKEN not found in auth.json. Exiting.");
+            exit(1);
+        }
+    };
+
+    let iam_config: IAMConfiguration = get_iam_configuration(Some(token.clone()));
+    let metadata_config: MetadataConfiguration = get_metadata_configuration(Some(token.clone()));
+
     check_session_gurad(
         cli,
         config_path,

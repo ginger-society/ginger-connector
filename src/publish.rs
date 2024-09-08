@@ -253,9 +253,13 @@ pub async fn publish_metadata(
     };
 
     let db_config_path = Path::new("database.toml");
-    let (tables, schema_id) = match read_db_config(db_config_path) {
-        Ok(config) => (config.tables.names, Some(config.schema.schema_id)),
-        Err(_) => (vec![], None),
+    let (tables, schema_id, cache_schema_id) = match read_db_config(db_config_path) {
+        Ok(config) => (
+            config.tables.names,
+            Some(config.schema.schema_id),
+            Some(config.schema.cache_schema_id),
+        ),
+        Err(_) => (vec![], None, None),
     };
 
     let mut dependencies_list: Vec<String> =
@@ -273,6 +277,7 @@ pub async fn publish_metadata(
                 dependencies: dependencies_list,
                 tables,
                 db_schema_id: schema_id,
+                cache_schema_id: cache_schema_id,
                 service_type: Some(services_config.service_type),
                 version: Some(Some(version)),
                 lang: Some(

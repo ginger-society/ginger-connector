@@ -7,4 +7,4 @@ schema_id = "random-id-from-toml"
 url = "http://localhost:8001"
 
 [tables]
-names = ["dbschema", "dbschema_branch", "templates", "service", "service_envs"]
+names = []
