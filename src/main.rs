@@ -11,13 +11,19 @@ use init::initialize;
 use publish::publish_metadata;
 use serde_json::Value;
 use service::{generate_client, generate_references};
-use utils::{fetch_metadata_and_process, register_db, register_package, update_pipeline, LANG};
+use utils::{
+    fetch_metadata_and_process, register_db, register_package, split_slug, update_pipeline, LANG,
+};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::apis::default_api::identity_validate_api_token;
 use IAMService::{
     apis::{configuration::Configuration, default_api::identity_validate_token},
     get_configuration as get_iam_configuration,
 };
+use MetadataService::apis::default_api::{
+    metadata_update_db_pipeline, MetadataUpdateDbPipelineParams,
+};
+use MetadataService::models::UpdateDbPipelineRequest;
 use MetadataService::{
     apis::configuration::Configuration as MetadataConfiguration,
     get_configuration as get_metadata_configuration,
@@ -65,6 +71,14 @@ enum Commands {
         env: Environment,
         #[clap(value_parser)]
         status: String,
+    },
+    UpdateDBPipeline {
+        #[clap(value_enum, default_value_t=Environment::Dev)]
+        env: Environment,
+        #[clap(value_parser)]
+        status: String,
+        #[clap(value_parser)]
+        slug: String,
     },
     /// Generates references to portals
     Refer {
@@ -133,7 +147,7 @@ async fn check_session_gurad(
                         )
                         .await
                     } else {
-                        register_db(&metadata_config).await;
+                        register_db(&metadata_config, releaser_path).await;
                     }
                 }
                 Commands::Connect { env } => {
@@ -162,6 +176,34 @@ async fn check_session_gurad(
                         status.clone(),
                     )
                     .await
+                }
+                Commands::UpdateDBPipeline { env, status, slug } => {
+                    if let Some((org_id, name)) = split_slug(slug) {
+                        println!("Organization ID: {}", org_id);
+                        println!("Name: {}", name);
+                        match metadata_update_db_pipeline(
+                            &metadata_config,
+                            MetadataUpdateDbPipelineParams {
+                                update_db_pipeline_request: UpdateDbPipelineRequest {
+                                    status: status.to_string(),
+                                },
+                                org_id: org_id,
+                                schema_name: name,
+                                branch_name: env.to_string(),
+                            },
+                        )
+                        .await
+                        {
+                            Ok(resp) => {
+                                println!("{:?}", resp);
+                            }
+                            Err(e) => {
+                                println!("Error {}", e);
+                            }
+                        }
+                    } else {
+                        println!("Invalid slug format");
+                    }
                 }
             };
 

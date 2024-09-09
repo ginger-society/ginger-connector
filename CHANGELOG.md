@@ -1,3 +1,13 @@
+## 0.8.0-nightly.0 - 2024-09-09
+feat:
+ - [bb5133ad11](https://github.com/ginger-society/ginger-connectorbb5133ad113d3a537b81d9446ae6396000ead499) (Ginger Society Admin) feat: added register db feature
+	
+ - [c4660cc1df](https://github.com/ginger-society/ginger-connectorc4660cc1dfaf03de76829a53d3129f86b8b49abe) (Ginger Society Admin) feat: updated pyproject format
+	
+## 0.7.0-nightly.0 - 2024-08-20
+chore:
+ - [6096d6a5a6](https://github.com/ginger-society/ginger-connector6096d6a5a6b3ba253a99dc6f332419faa0423860) (Ginger Society Admin) chore: version bump to 0.7.0-nightly.0
+	
 ## 0.6.0-nightly.0 - 2024-08-20
 chore:
  - [4f64fd80ca](https://github.com/ginger-society/ginger-connector4f64fd80cac275c99cb78a4a540d5a35fa6696eb) (Ginger Society Admin) chore: version bump to 0.6.0-nightly.0
@@ -35,11 +45,11 @@ chore:
  - [229d7634c4](https://github.com/ginger-society/ginger-connector229d7634c402c8c3a27632b2798731e01b4830f2) (Ginger Society Admin) chore: version bump to 0.4.0-nightly.0
 	
 ## 0.3.0-nightly.0 - 2024-06-28
-chore:
- - [07b3df356f](https://github.com/ginger-society/ginger-connector07b3df356f50ebbaaa8bb5ce2b56256ec4779498) (Ginger Society Admin) chore: version bump to 0.3.0-nightly.0
-	
 feat:
  - [3b789ea981](https://github.com/ginger-society/ginger-connector3b789ea981a0696eda43e07cff79898f883fc4af) (Ginger Society Admin) feat: updated readme
+	
+chore:
+ - [07b3df356f](https://github.com/ginger-society/ginger-connector07b3df356f50ebbaaa8bb5ce2b56256ec4779498) (Ginger Society Admin) chore: version bump to 0.3.0-nightly.0
 	
 ## 0.2.0-nightly.0 - 2024-06-28
 chore:
@@ -49,6 +59,11 @@ feat:
  - [42d2597c66](https://github.com/ginger-society/ginger-connector42d2597c66893039dab51e166a56924c7e771454) (Ginger Society Admin) feat: added changelog to git
 	
 ## 0.1.0-nightly.0 - 2024-06-28
+chore:
+ - [98cf18d34d](https://github.com/ginger-society/ginger-connector98cf18d34d59e6181989b274a5a9dfbd2e38849b) (Ginger Society Admin) chore: version bump to 0.1.0-nightly.0
+	
+ - [527067433c](https://github.com/ginger-society/ginger-connector527067433c5c49e8a2daefa9056b7bb20e117780) (Ginger Society Admin) chore: Initialized git and added readme
+	
 feat:
  - [19a66c4f41](https://github.com/ginger-society/ginger-connector19a66c4f4166af3d31e003f2e20bcba76af99965) (Ginger Society Admin) feat: added releaser
 	
@@ -57,9 +72,4 @@ feat:
  - [1ae8ef9223](https://github.com/ginger-society/ginger-connector1ae8ef92238b9d6432df9e6330cc1861ccbcbbc7) (Ginger Society Admin) feat: added openapi client generation
 	
  - [51eca320cf](https://github.com/ginger-society/ginger-connector51eca320cf408e0f4f5238fbbb8d9239ca73d2b9) (Ginger Society Admin) feat: renamed to ginger-connector
-	
-chore:
- - [98cf18d34d](https://github.com/ginger-society/ginger-connector98cf18d34d59e6181989b274a5a9dfbd2e38849b) (Ginger Society Admin) chore: version bump to 0.1.0-nightly.0
-	
- - [527067433c](https://github.com/ginger-society/ginger-connector527067433c5c49e8a2daefa9056b7bb20e117780) (Ginger Society Admin) chore: Initialized git and added readme
 	

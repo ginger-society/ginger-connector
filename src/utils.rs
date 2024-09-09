@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     collections::HashMap,
     error::Error,
     fmt,
@@ -36,6 +37,14 @@ use crate::{
     publish::{get_cargo_toml_info, get_package_json_info, get_pyproject_toml_info},
     Environment,
 };
+
+pub fn split_slug(slug: &str) -> Option<(String, String)> {
+    // Attempt to split the slug into two parts based on the '/'
+    match slug.split_once('/') {
+        Some((org_id, name)) => Some((org_id.to_string(), name.to_string())),
+        None => None, // Return None if the slug does not contain a '/'
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ORM {
@@ -127,6 +136,176 @@ pub struct PackageMetadata {
     pub package_type: String,
 }
 
+#[derive(Debug)]
+pub enum FileType {
+    Py,
+    Toml,
+    Json,
+    Unknown,
+}
+
+impl FileType {
+    fn from_extension(ext: Option<&str>) -> FileType {
+        match ext {
+            Some("py") => FileType::Py,
+            Some("toml") => FileType::Toml,
+            Some("json") => FileType::Json,
+            _ => FileType::Unknown,
+        }
+    }
+}
+
+impl fmt::Display for FileType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FileType::Py => write!(f, "Py"),
+            FileType::Toml => write!(f, "Toml"),
+            FileType::Json => write!(f, "Json"),
+            FileType::Unknown => write!(f, "Unknown"),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
+pub enum Channel {
+    Final,
+    Nightly, // Also known as Dev branch
+    Alpha,
+    Beta,
+}
+impl fmt::Display for Channel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Channel::Nightly => write!(f, "nightly"),
+            Channel::Final => write!(f, "final"),
+            Channel::Alpha => write!(f, "alpha"),
+            Channel::Beta => write!(f, "beta"),
+        }
+    }
+}
+
+impl From<&str> for Channel {
+    fn from(channel: &str) -> Self {
+        match channel {
+            "nightly" => Channel::Nightly,
+            "alpha" => Channel::Alpha,
+            "beta" => Channel::Beta,
+            "final" => Channel::Final,
+            _ => exit(1),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, Eq)]
+pub struct Version {
+    pub channel: Channel,
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+    pub revision: u32,
+}
+
+impl Version {
+    pub fn formatted(&self) -> String {
+        match &self.channel {
+            Channel::Final => {
+                format!("{}.{}.{}", self.major, self.minor, self.patch)
+            }
+            _ => {
+                format!(
+                    "{}.{}.{}-{}.{}",
+                    self.major, self.minor, self.patch, self.channel, self.revision
+                )
+            }
+        }
+    }
+    pub fn tuple(&self) -> String {
+        format!(
+            "({}, {}, {}, \"{}\", {})",
+            self.major, self.minor, self.patch, self.channel, self.revision
+        )
+    }
+
+    pub fn from_str(version: &str) -> Self {
+        let parts: Vec<&str> = version.split(|c| c == '.' || c == '-').collect();
+        let major = parts[0].parse().unwrap_or(0);
+        let minor = parts[1].parse().unwrap_or(0);
+        let patch = parts[2].parse().unwrap_or(0);
+        let (channel, revision) = if parts.len() > 3 {
+            (Channel::from(parts[3]), parts[4].parse().unwrap_or(0))
+        } else {
+            (Channel::Final, 0)
+        };
+
+        Version {
+            major,
+            minor,
+            patch,
+            channel,
+            revision,
+        }
+    }
+}
+
+impl Ord for Version {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.major
+            .cmp(&other.major)
+            .then(self.minor.cmp(&other.minor))
+            .then(self.patch.cmp(&other.patch))
+            .then(self.channel.cmp(&other.channel))
+            .then(self.revision.cmp(&other.revision))
+    }
+}
+
+impl PartialOrd for Version {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Version {
+    fn eq(&self, other: &Self) -> bool {
+        self.major == other.major
+            && self.minor == other.minor
+            && self.patch == other.patch
+            && self.channel == other.channel
+            && self.revision == other.revision
+    }
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub enum OutputType {
+    String,
+    Tuple,
+}
+
+impl fmt::Display for OutputType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OutputType::String => write!(f, "String"),
+            OutputType::Tuple => write!(f, "Tuple"),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Reference {
+    pub file_name: String,
+    #[serde(default = "default_output_type")] // Use a default value function
+    pub output_type: OutputType, // `type` is a reserved keyword in Rust
+    pub variable: String,
+    #[serde(skip, default = "default_file_type")] // This field is not in the TOML file
+    pub file_type: FileType,
+}
+
+fn default_file_type() -> FileType {
+    FileType::Unknown
+}
+
+fn default_output_type() -> OutputType {
+    OutputType::String // Default value is "string"
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ReleaserSettings {
     pub git_url_prefix: Option<String>,
@@ -135,6 +314,7 @@ pub struct ReleaserSettings {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ReleaserConfig {
     pub settings: ReleaserSettings,
+    pub version: Version,
 }
 
 pub fn read_releaser_config_file<P: AsRef<Path>>(
@@ -289,12 +469,20 @@ pub async fn update_pipeline(
     }
 }
 
-pub async fn register_db(metadata_config: &MetadataConfiguration) {
+pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path: &Path) {
     let mut db_config = match read_db_config_v2("db-compose.toml") {
         Ok(config) => config,
         Err(err) => {
             eprintln!("Error reading db-compose.toml: {:?}", err);
             return;
+        }
+    };
+
+    let releaser_config = match read_releaser_config_file(releaser_path) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("{:?}", e);
+            exit(1);
         }
     };
 
@@ -311,8 +499,11 @@ pub async fn register_db(metadata_config: &MetadataConfiguration) {
                             name: db.name.clone(),
                             description: Some(Some(db.description.clone())),
                             organisation_id: db_config.organization_id.clone(),
+                            repo_origin: releaser_config.clone().settings.git_url_prefix.unwrap(),
+                            version: releaser_config.version.formatted(),
                         },
                         schema_id: db.id.clone().unwrap(),
+                        branch_name: db_config.branch.clone(),
                     },
                 )
                 .await
@@ -334,6 +525,8 @@ pub async fn register_db(metadata_config: &MetadataConfiguration) {
                             data: None,
                             organisation_id: db_config.organization_id.clone(),
                             db_type: db.db_type.to_string(),
+                            repo_origin: releaser_config.clone().settings.git_url_prefix.unwrap(),
+                            version: releaser_config.version.formatted(),
                         },
                     },
                 )
@@ -377,11 +570,10 @@ pub async fn register_package(
 
     let releaser_config = match read_releaser_config_file(releaser_path) {
         Ok(c) => c,
-        Err(_) => ReleaserConfig {
-            settings: ReleaserSettings {
-                git_url_prefix: None,
-            },
-        },
+        Err(e) => {
+            println!("{:?}", e);
+            exit(1);
+        }
     };
 
     let mut dependencies_list: Vec<String> =

@@ -186,11 +186,7 @@ pub async fn publish_metadata(
         Ok(c) => c,
         Err(e) => {
             println!("{:?}", e);
-            ReleaserConfig {
-                settings: ReleaserSettings {
-                    git_url_prefix: None,
-                },
-            }
+            exit(1);
         }
     };
 
