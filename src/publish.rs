@@ -296,7 +296,7 @@ pub async fn publish_metadata(
             println!("{:?}", response)
         }
         Err(e) => {
-            println!("{:?}", e)
+            println!("Error updating / creating the service {:?}", e)
         }
     };
 }

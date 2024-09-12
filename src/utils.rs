@@ -468,7 +468,6 @@ pub async fn update_pipeline(
         }
     }
 }
-
 pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path: &Path) {
     let mut db_config = match read_db_config_v2("db-compose.toml") {
         Ok(config) => config,
@@ -489,7 +488,8 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
     // Iterate over all the databases in the configuration
     for db in &mut db_config.database {
         match &db.id {
-            Some(id) => {
+            Some(id) if !id.is_empty() => {
+                // If db.id exists and is not an empty string
                 println!("Database '{}' has ID: {}", db.name, id);
 
                 match metadata_update_dbschema(
@@ -502,7 +502,7 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
                             repo_origin: releaser_config.clone().settings.git_url_prefix.unwrap(),
                             version: releaser_config.version.formatted(),
                         },
-                        schema_id: db.id.clone().unwrap(),
+                        schema_id: id.clone(),
                         branch_name: db_config.branch.clone(),
                     },
                 )
@@ -514,8 +514,9 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
                     }
                 };
             }
-            None => {
-                println!("Database '{}' is missing an ID", db.name);
+            _ => {
+                // Handle case when db.id is None or an empty string
+                println!("Database '{}' is missing a valid ID", db.name);
                 match metadata_create_dbschema(
                     &metadata_config,
                     MetadataCreateDbschemaParams {
@@ -533,7 +534,7 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
                 .await
                 {
                     Ok(resp) => {
-                        // println!("Success : {:?}", resp.identifier)
+                        // Update db.id with the newly created schema identifier
                         db.id = Some(resp.identifier.clone());
                     }
                     Err(err) => {

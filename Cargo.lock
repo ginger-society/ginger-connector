@@ -477,7 +477,7 @@ checksum = "40ecd4077b5ae9fd2e9e169b102c6c330d0605168eb0e8bf79952b256dbefffd"
 
 [[package]]
 name = "ginger-connector"
-version = "0.7.0-nightly.0"
+version = "0.8.0-nightly.0"
 dependencies = [
  "IAMService",
  "MetadataService",
