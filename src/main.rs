@@ -25,7 +25,6 @@ use MetadataService::{
     get_configuration as get_metadata_configuration,
 };
 
-mod db_utils;
 mod generate;
 mod init;
 mod publish;

@@ -1,12 +1,11 @@
-use std::{collections::HashMap, fs::File, io::BufReader, path::Path, process::exit};
+use std::{collections::HashMap, path::Path, process::exit};
 
 use colored::Colorize;
 use ginger_shared_rs::{
-    read_package_metadata_file, read_releaser_config_file, read_service_config_file,
-    write_service_config_file, LANG,
+    read_db_config, read_package_metadata_file, read_releaser_config_file,
+    read_service_config_file, write_db_config, write_service_config_file, LANG,
 };
 use inquire::{list_option::ListOption, validator::Validation, MultiSelect};
-use serde_json::Value;
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use MetadataService::{
     apis::{
@@ -26,7 +25,6 @@ use MetadataService::{
 };
 
 use crate::{
-    db_utils::{read_db_config_v2, write_db_config_v2},
     publish::{get_cargo_toml_info, get_package_json_info, get_pyproject_toml_info},
     Environment,
 };
@@ -108,7 +106,7 @@ pub async fn update_pipeline(
     }
 }
 pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path: &Path) {
-    let mut db_config = match read_db_config_v2("db-compose.toml") {
+    let mut db_config = match read_db_config("db-compose.toml") {
         Ok(config) => config,
         Err(err) => {
             eprintln!("Error reading db-compose.toml: {:?}", err);
@@ -184,7 +182,7 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
         }
     }
 
-    write_db_config_v2("db-compose.toml", &db_config).unwrap();
+    write_db_config("db-compose.toml", &db_config).unwrap();
 }
 
 pub async fn register_package(
