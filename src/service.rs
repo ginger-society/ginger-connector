@@ -6,6 +6,7 @@ use std::{
 };
 
 use colored::Colorize;
+use ginger_shared_rs::{read_config_file, Service, LANG};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use MetadataService::apis::default_api::{
     metadata_get_service_and_env_by_id, MetadataGetServiceAndEnvByIdParams,
@@ -15,10 +16,7 @@ use MetadataService::apis::{
     default_api::{metadata_get_services_and_envs, MetadataGetServicesAndEnvsParams},
 };
 
-use crate::{
-    utils::{read_config_file, Service, LANG},
-    Environment,
-};
+use crate::Environment;
 
 fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base_url: &str) {
     let output_dir = format!("{}/{}_client", root_dir, service.name);

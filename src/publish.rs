@@ -1,11 +1,6 @@
-use crate::{
-    utils::{
-        read_config_file, read_db_config, read_releaser_config_file, ReleaserConfig,
-        ReleaserSettings, Service, LANG,
-    },
-    Environment,
-};
+use crate::{utils::read_db_config, Environment};
 use colored::Colorize;
+use ginger_shared_rs::{read_config_file, read_releaser_config_file, LANG};
 use reqwest::Client;
 use serde_json::Value as JsonValue;
 use std::{
@@ -112,6 +107,7 @@ pub fn get_cargo_toml_info() -> Option<(String, String, String, String, Vec<Stri
 }
 
 pub fn get_pyproject_toml_info() -> Option<(String, String, String, String, Vec<String>)> {
+    // Read and parse pyproject.toml
     let pyproject_toml_content =
         fs::read_to_string("pyproject.toml").expect("Failed to read pyproject.toml");
     let pyproject_toml: Value =
@@ -122,9 +118,50 @@ pub fn get_pyproject_toml_info() -> Option<(String, String, String, String, Vec<
     let description = pyproject_toml.get("description")?.as_str()?.to_string();
     let organization = pyproject_toml.get("organization")?.as_str()?.to_string();
 
-    Some((name, version, description, organization, Vec::new()))
-}
+    // Read and process requirements.txt
+    let requirements_path = Path::new("requirements.txt");
+    let mut dependencies = Vec::new();
 
+    if requirements_path.exists() {
+        let requirements_content =
+            fs::read_to_string(requirements_path).expect("Failed to read requirements.txt");
+
+        for line in requirements_content.lines() {
+            let trimmed_line = line.trim();
+
+            if trimmed_line.is_empty() {
+                continue; // Skip empty lines
+            }
+
+            // If the line starts with '#', treat it as an internal dependency
+            if trimmed_line.starts_with('#') {
+                let internal_dependency = trimmed_line.trim_start_matches('#').trim();
+                dependencies.push(internal_dependency.to_string());
+                continue;
+            }
+
+            // Split the line on '#', if any
+            let parts: Vec<&str> = trimmed_line.split('#').collect();
+            let mut dependency = parts[0].trim().to_string();
+
+            // Remove ==version if present
+            if let Some((dep_name, _version)) = dependency.split_once("==") {
+                dependency = dep_name.to_string();
+            }
+
+            if parts.len() > 1 {
+                let org = parts[1].trim();
+
+                // Check if the organization matches the one from pyproject.toml
+                if org == organization {
+                    dependencies.push(format!("@{}/{}", org, dependency));
+                }
+            }
+        }
+    }
+
+    Some((name, version, description, organization, dependencies))
+}
 async fn fetch_swagger_spec(
     client: &Client,
     url: &str,

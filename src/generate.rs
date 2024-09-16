@@ -1,5 +1,6 @@
-use crate::utils::LANG;
 use std::{fs::OpenOptions, io::Write, process::Command};
+
+use ginger_shared_rs::LANG;
 
 pub fn generate_arbitrary_client(
     swagger_path: &String,

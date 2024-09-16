@@ -7,13 +7,13 @@ use std::process::exit;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use generate::generate_arbitrary_client;
+use ginger_shared_rs::utils::split_slug;
+use ginger_shared_rs::LANG;
 use init::initialize;
 use publish::publish_metadata;
 use serde_json::Value;
 use service::{generate_client, generate_references};
-use utils::{
-    fetch_metadata_and_process, register_db, register_package, split_slug, update_pipeline, LANG,
-};
+use utils::{fetch_metadata_and_process, register_db, register_package, update_pipeline};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::apis::default_api::identity_validate_api_token;
 use IAMService::{

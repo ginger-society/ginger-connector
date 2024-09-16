@@ -484,11 +484,23 @@ dependencies = [
  "clap",
  "colored",
  "dirs",
+ "ginger-shared-rs",
  "inquire",
  "reqwest",
  "serde",
  "serde_json",
  "tokio",
+ "toml",
+]
+
+[[package]]
+name = "ginger-shared-rs"
+version = "0.4.0-nightly.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4967a743fd67fd8ad9d704a48c364d2916c902b5a2b5d1e3b705f64a6b779389"
+dependencies = [
+ "clap",
+ "serde",
  "toml",
 ]
 

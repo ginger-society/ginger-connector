@@ -1,8 +1,7 @@
 use std::{collections::HashMap, path::Path, process::exit};
 
+use ginger_shared_rs::{write_config_file, Config, LANG};
 use inquire::{InquireError, Select, Text};
-
-use crate::utils::{write_config_file, Config, LANG};
 
 pub fn initialize(config_path: &Path) {
     let options = LANG::all();
