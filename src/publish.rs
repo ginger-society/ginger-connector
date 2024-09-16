@@ -92,6 +92,7 @@ pub fn get_cargo_toml_info() -> Option<(String, String, String, String, Vec<Stri
         let name = package.get("name")?.as_str()?.to_string();
         let version = package.get("version")?.as_str()?.to_string();
         let description = package.get("description")?.as_str()?.to_string();
+        let mut internal_dependencies = Vec::new();
 
         let metadata = cargo_toml
             .get("package")
@@ -99,7 +100,34 @@ pub fn get_cargo_toml_info() -> Option<(String, String, String, String, Vec<Stri
             .expect("there is no metadata field in your cargo.toml");
         let organization = metadata.get("organization")?.as_str()?.to_string();
 
-        Some((name, version, description, organization, Vec::new()))
+        // Extract dependencies
+        let dependencies = cargo_toml
+            .get("dependencies")
+            .expect("there is no dependencies field in your Cargo.toml");
+
+        if let Some(deps) = dependencies.as_table() {
+            for (key, value) in deps {
+                if let Some(dep_table) = value.as_table() {
+                    // Check if the dependency has an organization field
+                    if let Some(dep_org) = dep_table.get("organization") {
+                        if dep_org.as_str()? == organization {
+                            let dep_format = format!("@{}/{}", organization, key);
+                            internal_dependencies.push(dep_format);
+                        }
+                    }
+                }
+            }
+        }
+
+        println!("{:?}", internal_dependencies);
+
+        Some((
+            name,
+            version,
+            description,
+            organization,
+            internal_dependencies,
+        ))
     } else {
         None
     }
