@@ -7,13 +7,9 @@ use std::{
 
 use colored::Colorize;
 use ginger_shared_rs::{read_service_config_file, Service, LANG};
-use IAMService::apis::configuration::Configuration as IAMConfiguration;
+use MetadataService::apis::configuration::Configuration as MetadataConfiguration;
 use MetadataService::apis::default_api::{
     metadata_get_service_and_env_by_id, MetadataGetServiceAndEnvByIdParams,
-};
-use MetadataService::apis::{
-    configuration::Configuration as MetadataConfiguration,
-    default_api::{metadata_get_services_and_envs, MetadataGetServicesAndEnvsParams},
 };
 
 use crate::Environment;
