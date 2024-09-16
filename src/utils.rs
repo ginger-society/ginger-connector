@@ -1,22 +1,11 @@
-use std::{
-    cmp::Ordering,
-    collections::HashMap,
-    error::Error,
-    fmt,
-    fs::{self, File, OpenOptions},
-    io::{BufReader, Read, Write},
-    path::Path,
-    process::{exit, Command},
-};
+use std::{collections::HashMap, fs::File, io::BufReader, path::Path, process::exit};
 
-use clap::ValueEnum;
 use colored::Colorize;
 use ginger_shared_rs::{
-    read_config_file, read_package_metadata_file, read_releaser_config_file, write_config_file,
-    DBConfig, LANG,
+    read_package_metadata_file, read_releaser_config_file, read_service_config_file,
+    write_service_config_file, LANG,
 };
 use inquire::{list_option::ListOption, validator::Validation, MultiSelect};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use MetadataService::{
@@ -42,51 +31,8 @@ use crate::{
     Environment,
 };
 
-fn get_internal_dependencies<P: AsRef<Path>>(
-    file_path: P,
-) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let json_value: Value = serde_json::from_reader(reader)?;
-
-    // Extract the prefix from the "name" field
-    let prefix = if let Some(name) = json_value.get("name").and_then(|n| n.as_str()) {
-        if let Some(pos) = name.rfind('/') {
-            &name[..=pos]
-        } else {
-            name
-        }
-    } else {
-        return Err("Unable to find the 'name' field in the file".into());
-    };
-
-    let mut internal_dependencies = Vec::new();
-
-    if let Some(dependencies) = json_value.get("dependencies").and_then(|d| d.as_object()) {
-        for (key, _) in dependencies {
-            if key.starts_with(prefix) {
-                internal_dependencies.push(key.clone());
-            }
-        }
-    }
-
-    if let Some(dev_dependencies) = json_value
-        .get("devDependencies")
-        .and_then(|d| d.as_object())
-    {
-        for (key, _) in dev_dependencies {
-            if key.starts_with(prefix) {
-                internal_dependencies.push(key.clone());
-            }
-        }
-    }
-
-    Ok(internal_dependencies)
-}
-
 pub async fn update_pipeline(
     package_path: &Path,
-    iam_config: &IAMConfiguration,
     metadata_config: &MetadataConfiguration,
     config_path: &Path,
     env: Environment,
@@ -110,7 +56,7 @@ pub async fn update_pipeline(
             }),
         };
 
-    let services_config = match read_config_file(config_path) {
+    let services_config = match read_service_config_file(config_path) {
         Ok(c) => c,
         Err(e) => {
             println!("{:?}", e);
@@ -250,7 +196,7 @@ pub async fn register_package(
     releaser_path: &Path,
 ) {
     let metadata_details = read_package_metadata_file(package_path).unwrap();
-    let services_config = match read_config_file(config_path) {
+    let services_config = match read_service_config_file(config_path) {
         Ok(c) => c,
         Err(e) => {
             println!("{:?}", e);
@@ -326,7 +272,7 @@ pub async fn fetch_metadata_and_process(
     iam_config: &IAMConfiguration,
     metadata_config: &MetadataConfiguration,
 ) {
-    let mut config = read_config_file(config_path).unwrap();
+    let mut config = read_service_config_file(config_path).unwrap();
     println!("{:?}", config);
     match metadata_get_services_and_envs(
         metadata_config,
@@ -458,7 +404,7 @@ pub async fn fetch_metadata_and_process(
             config.services = Some(new_services);
             config.portals_refs = Some(new_portal_refs);
 
-            match write_config_file(config_path, &config) {
+            match write_service_config_file(config_path, &config) {
                 Ok(_) => println!("Configuration updated successfully"),
                 Err(_) => println!("Could not save the config file. Please check if you have appropriate permission to write"),
             };
@@ -469,15 +415,4 @@ pub async fn fetch_metadata_and_process(
             exit(1)
         }
     };
-}
-
-pub fn read_db_config<P: AsRef<Path>>(path: P) -> Result<DBConfig, Box<dyn Error>> {
-    // Open the file
-    let mut file = File::open(path)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-
-    // Deserialize the TOML contents into the DBConfig struct
-    let config: DBConfig = toml::from_str(&contents)?;
-    Ok(config)
 }

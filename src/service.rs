@@ -6,7 +6,7 @@ use std::{
 };
 
 use colored::Colorize;
-use ginger_shared_rs::{read_config_file, Service, LANG};
+use ginger_shared_rs::{read_service_config_file, Service, LANG};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use MetadataService::apis::default_api::{
     metadata_get_service_and_env_by_id, MetadataGetServiceAndEnvByIdParams,
@@ -288,7 +288,7 @@ fn print_openapi_generator_not_found() {
 }
 
 pub fn generate_references(config_path: &Path, env: Environment) {
-    let services_config = match read_config_file(config_path) {
+    let services_config = match read_service_config_file(config_path) {
         Ok(c) => c,
         Err(err) => {
             println!("{:?}", err);
@@ -392,7 +392,7 @@ pub async fn generate_client(
     env: Environment,
     metadata_config: &MetadataConfiguration,
 ) {
-    let services_config = match read_config_file(config_path) {
+    let services_config = match read_service_config_file(config_path) {
         Ok(c) => c,
         Err(err) => {
             println!("{:?}", err);

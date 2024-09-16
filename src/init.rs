@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path, process::exit};
 
-use ginger_shared_rs::{write_config_file, Config, LANG};
+use ginger_shared_rs::{write_service_config_file, ServiceConfig, LANG};
 use inquire::{InquireError, Select, Text};
 
 pub fn initialize(config_path: &Path) {
@@ -16,7 +16,7 @@ pub fn initialize(config_path: &Path) {
                 .prompt()
             {
                 Ok(dir) => {
-                    let config = Config {
+                    let config = ServiceConfig {
                         lang: lang_selected,
                         dir: Some(dir.clone()),
                         portal_refs_file: None,
@@ -28,7 +28,7 @@ pub fn initialize(config_path: &Path) {
                         portals_refs: Some(HashMap::new()),
                         organization_id: "".to_string(),
                     };
-                    match write_config_file(config_path, &config) {
+                    match write_service_config_file(config_path, &config) {
                         Ok(_) => println!("Success!"),
                         Err(_) => println!("Unable to create the configuration. Please check if you have permission to create {:?}" , dir)
                     };

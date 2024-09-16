@@ -1,5 +1,4 @@
 use core::fmt;
-use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -16,10 +15,7 @@ use service::{generate_client, generate_references};
 use utils::{fetch_metadata_and_process, register_db, register_package, update_pipeline};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::apis::default_api::identity_validate_api_token;
-use IAMService::{
-    apis::{configuration::Configuration, default_api::identity_validate_token},
-    get_configuration as get_iam_configuration,
-};
+use IAMService::get_configuration as get_iam_configuration;
 use MetadataService::apis::default_api::{
     metadata_update_db_pipeline, MetadataUpdateDbPipelineParams,
 };
@@ -169,7 +165,6 @@ async fn check_session_gurad(
                 Commands::UpdatePipeline { env, status } => {
                     update_pipeline(
                         package_path,
-                        &iam_config,
                         &metadata_config,
                         config_path,
                         env.clone(),

@@ -1,6 +1,8 @@
-use crate::{utils::read_db_config, Environment};
+use crate::Environment;
 use colored::Colorize;
-use ginger_shared_rs::{read_config_file, read_releaser_config_file, LANG};
+use ginger_shared_rs::{
+    read_consumer_db_config, read_releaser_config_file, read_service_config_file, LANG,
+};
 use reqwest::Client;
 use serde_json::Value as JsonValue;
 use std::{
@@ -14,10 +16,7 @@ use toml::Value;
 use MetadataService::{
     apis::{
         configuration::Configuration as MetadataConfiguration,
-        default_api::{
-            metadata_get_services_and_envs, metadata_update_or_create_service,
-            MetadataGetServicesAndEnvsParams, MetadataUpdateOrCreateServiceParams,
-        },
+        default_api::{metadata_update_or_create_service, MetadataUpdateOrCreateServiceParams},
     },
     models::UpdateServiceRequest,
 };
@@ -206,7 +205,7 @@ pub async fn publish_metadata(
     metadata_config: &MetadataConfiguration,
     releaser_path: &Path,
 ) {
-    let services_config = match read_config_file(config_path) {
+    let services_config = match read_service_config_file(config_path) {
         Ok(c) => c,
         Err(e) => {
             println!("{:?}", e);
@@ -286,7 +285,7 @@ pub async fn publish_metadata(
     };
 
     let db_config_path = Path::new("database.toml");
-    let (tables, schema_id, cache_schema_id) = match read_db_config(db_config_path) {
+    let (tables, schema_id, cache_schema_id) = match read_consumer_db_config(db_config_path) {
         Ok(config) => (
             config.tables.names,
             Some(config.schema.schema_id),
