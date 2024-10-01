@@ -1,3 +1,4 @@
+use reqwest::Client;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -10,6 +11,7 @@ use ginger_shared_rs::{
     read_service_config_file, write_db_config, write_service_config_file, LANG,
 };
 use inquire::{list_option::ListOption, validator::Validation, MultiSelect};
+use serde_json::json;
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use MetadataService::{
     apis::{
@@ -335,6 +337,7 @@ pub async fn fetch_dependent_pipelines(
     config_path: &Path,
     iam_config: &IAMConfiguration,
     metadata_config: &MetadataConfiguration,
+    pipeline_token: &String,
 ) {
     let config = read_service_config_file(config_path).unwrap();
 
@@ -361,6 +364,8 @@ pub async fn fetch_dependent_pipelines(
 
     let mut dependencies_map: HashMap<String, Vec<String>> = HashMap::new();
 
+    let mut repo_details_map: HashMap<String, Option<(String, String)>> = HashMap::new();
+
     match metadata_get_user_packages(
         metadata_config,
         MetadataGetUserPackagesParams {
@@ -372,14 +377,18 @@ pub async fn fetch_dependent_pipelines(
     {
         Ok(packages) => {
             for pkg in packages {
-                dependencies_map.insert(
-                    format!(
-                        "@{}/{}",
-                        config.organization_id.clone(),
-                        pkg.identifier.clone()
-                    ),
-                    pkg.dependencies.clone(),
+                let key = format!(
+                    "@{}/{}",
+                    config.organization_id.clone(),
+                    pkg.identifier.clone()
                 );
+
+                repo_details_map.insert(
+                    key.clone(),
+                    extract_username_and_repo(&pkg.repo_origin.unwrap().unwrap()),
+                );
+
+                dependencies_map.insert(key.clone(), pkg.dependencies.clone());
             }
         }
         Err(_) => todo!(),
@@ -410,7 +419,10 @@ pub async fn fetch_dependent_pipelines(
                         let mut dependencies = service.dependencies.clone();
 
                         for schema in schemas.clone() {
-                            if schema.identifier == service.db_schema_id {
+                            if schema.identifier == service.db_schema_id
+                                || schema.identifier == service.message_queue_schema_id
+                                || schema.identifier == service.cache_schema_id
+                            {
                                 dependencies.push(format!(
                                     "@{}/{}",
                                     config.organization_id.clone(),
@@ -418,13 +430,18 @@ pub async fn fetch_dependent_pipelines(
                                 ));
                             }
                         }
-                        dependencies_map.insert(
-                            format!(
-                                "@{}/{}",
-                                config.organization_id.clone(),
-                                service.identifier.clone()
-                            ),
-                            dependencies,
+
+                        let key = format!(
+                            "@{}/{}",
+                            config.organization_id.clone(),
+                            service.identifier.clone()
+                        );
+
+                        dependencies_map.insert(key.clone(), dependencies);
+
+                        repo_details_map.insert(
+                            key.clone(),
+                            extract_username_and_repo(&service.repo_origin.unwrap().unwrap()),
                         );
                     }
                 }
@@ -433,15 +450,87 @@ pub async fn fetch_dependent_pipelines(
         }
         Err(_) => todo!(),
     }
-    println!("{:?}", dependencies_map);
 
     let mut triggered_set = HashSet::new();
     let pipelines = find_pipelines_to_trigger(
         &dependencies_map,
-        &"@ginger-society/dev-portal".to_string(),
+        &format!(
+            "@{}/{}",
+            config.organization_id.clone(),
+            current_package_name
+        ),
         &mut triggered_set,
     );
+
     println!("Pipelines : {:?}", pipelines);
+
+    let client = Client::new();
+    for pipeline in pipelines {
+        if let Some((repo_owner, repo_name)) =
+            repo_details_map.get(&pipeline).and_then(|x| x.clone())
+        {
+            // Set the request URL for dispatching the workflow
+            let url = format!(
+                "https://api.github.com/repos/{}/{}/actions/workflows/CI.yml/dispatches",
+                repo_owner, repo_name
+            );
+
+            // Prepare the JSON body
+            let body = json!({
+                "ref": "main" // Specify the branch to trigger the workflow
+            });
+
+            println!("{:?} , {:?}", format!("Bearer {}", pipeline_token), url);
+            // Make the POST request
+            let response = client
+                .post(&url)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "ginger-connector") // Added User-Agent header
+                .header("Authorization", format!("Bearer {}", pipeline_token))
+                .json(&body)
+                .send()
+                .await;
+
+            match response {
+                Ok(resp) if resp.status().is_success() => {
+                    println!("Workflow dispatched for pipeline: {}", pipeline);
+                }
+                Ok(resp) => {
+                    eprintln!(
+                        "Failed to dispatch workflow for pipeline {}: Status Code: {} {:?}",
+                        pipeline,
+                        resp.status(),
+                        resp
+                    );
+                }
+                Err(e) => eprintln!(
+                    "Error occurred while dispatching workflow for pipeline {}: {:?}",
+                    pipeline, e
+                ),
+            }
+        } else {
+            eprintln!("Repo details not found for pipeline: {}", pipeline);
+        }
+    }
+}
+
+fn extract_username_and_repo(github_url: &str) -> Option<(String, String)> {
+    // Check if the input string starts with the expected GitHub URL pattern
+    if github_url.starts_with("https://github.com/") {
+        // Strip the "https://github.com/" part and split the rest by '/'
+        let parts: Vec<&str> = github_url["https://github.com/".len()..]
+            .split('/')
+            .collect();
+
+        // Ensure there are exactly two parts: username and repo name
+        if parts.len() == 2 {
+            let username = parts[0].to_string();
+            let repo_name = parts[1].to_string();
+            return Some((username, repo_name));
+        }
+    }
+    // Return None if the URL is not valid or doesn't match the expected pattern
+    None
 }
 
 pub async fn fetch_metadata_and_process(

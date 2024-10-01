@@ -59,7 +59,7 @@ enum Commands {
     /// Configures a service to a project
     Config,
     /// Configures a service to a project
-    TriggerDependentPipelines,
+    TriggerDependentPipelines { pipeline_token: String },
     /// Connect to an environment
     Connect {
         #[clap(value_enum, default_value_t=Environment::Dev)]
@@ -109,8 +109,14 @@ async fn check_session_gurad(
     match identity_validate_api_token(&iam_config).await {
         Ok(response) => {
             match &cli.command {
-                Commands::TriggerDependentPipelines {} => {
-                    fetch_dependent_pipelines(config_path, &iam_config, &metadata_config).await;
+                Commands::TriggerDependentPipelines { pipeline_token } => {
+                    fetch_dependent_pipelines(
+                        config_path,
+                        &iam_config,
+                        &metadata_config,
+                        pipeline_token,
+                    )
+                    .await;
                 }
                 Commands::Config {} => {
                     fetch_metadata_and_process(config_path, &iam_config, &metadata_config).await;
