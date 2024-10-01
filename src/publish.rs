@@ -1,7 +1,8 @@
 use crate::Environment;
 use colored::Colorize;
 use ginger_shared_rs::{
-    read_consumer_db_config, read_releaser_config_file, read_service_config_file, LANG,
+    read_consumer_db_config, read_package_metadata_file, read_releaser_config_file,
+    read_service_config_file, LANG,
 };
 use reqwest::Client;
 use serde_json::Value as JsonValue;
@@ -232,7 +233,12 @@ pub async fn publish_metadata(
     env: Environment,
     metadata_config: &MetadataConfiguration,
     releaser_path: &Path,
+    package_path: &Path,
 ) {
+    let package_metadata = read_package_metadata_file(package_path).unwrap();
+
+    let links_str = serde_json::to_string(&package_metadata.links).unwrap();
+
     let services_config = match read_service_config_file(config_path) {
         Ok(c) => c,
         Err(e) => {
@@ -313,14 +319,16 @@ pub async fn publish_metadata(
     };
 
     let db_config_path = Path::new("database.toml");
-    let (tables, schema_id, cache_schema_id) = match read_consumer_db_config(db_config_path) {
-        Ok(config) => (
-            config.tables.names,
-            Some(config.schema.schema_id),
-            Some(config.schema.cache_schema_id),
-        ),
-        Err(_) => (vec![], None, None),
-    };
+    let (tables, schema_id, cache_schema_id, message_queue_schema_id) =
+        match read_consumer_db_config(db_config_path) {
+            Ok(config) => (
+                config.tables.names,
+                Some(config.schema.schema_id),
+                Some(config.schema.cache_schema_id),
+                Some(config.schema.message_queue_schema_id),
+            ),
+            Err(_) => (vec![], None, None, None),
+        };
 
     let mut dependencies_list: Vec<String> =
         services_config.services.unwrap().keys().cloned().collect();
@@ -338,6 +346,7 @@ pub async fn publish_metadata(
                 tables,
                 db_schema_id: schema_id,
                 cache_schema_id: cache_schema_id,
+                message_queue_schema_id: message_queue_schema_id,
                 service_type: Some(services_config.service_type),
                 version: Some(Some(version)),
                 lang: Some(
@@ -351,6 +360,7 @@ pub async fn publish_metadata(
                 description: description,
                 organization_id: organization,
                 repo_origin: Some(releaser_config.settings.git_url_prefix),
+                quick_links: Some(Some(links_str)),
             },
         },
     )

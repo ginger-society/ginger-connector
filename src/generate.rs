@@ -16,6 +16,8 @@ pub fn generate_arbitrary_client(
 
     let language = match lang {
         LANG::TS => String::from("typescript-fetch"),
+        LANG::Rust => String::from("rust"),
+        LANG::Python => String::from("python"),
         _ => lang.to_string(),
     };
 

@@ -38,6 +38,8 @@ pub async fn update_pipeline(
 ) {
     let metadata_details = read_package_metadata_file(package_path).unwrap();
 
+    let links_str = serde_json::to_string(&metadata_details.links).unwrap();
+
     let (mut name, version, description, organization, internal_dependencies) =
         match metadata_details.lang {
             LANG::TS => get_package_json_info().unwrap_or_else(|| {
@@ -138,6 +140,7 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
                             organisation_id: db_config.organization_id.clone(),
                             repo_origin: releaser_config.clone().settings.git_url_prefix.unwrap(),
                             version: releaser_config.version.formatted(),
+                            quick_links: Some(Some(serde_json::to_string(&db.links).unwrap())),
                         },
                         schema_id: id.clone(),
                         branch_name: db_config.branch.clone(),
@@ -165,6 +168,7 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
                             db_type: db.db_type.to_string(),
                             repo_origin: releaser_config.clone().settings.git_url_prefix.unwrap(),
                             version: releaser_config.version.formatted(),
+                            quick_links: Some(Some(serde_json::to_string(&db.links).unwrap())),
                         },
                     },
                 )
@@ -187,13 +191,15 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
 
 pub async fn register_package(
     package_path: &Path,
-    iam_config: &IAMConfiguration,
     metadata_config: &MetadataConfiguration,
     config_path: &Path,
     env: Environment,
     releaser_path: &Path,
 ) {
     let metadata_details = read_package_metadata_file(package_path).unwrap();
+
+    let links_str = serde_json::to_string(&metadata_details.links).unwrap();
+
     let services_config = match read_service_config_file(config_path) {
         Ok(c) => c,
         Err(e) => {
@@ -237,20 +243,24 @@ pub async fn register_package(
 
     dependencies_list.extend(internal_dependencies);
 
+    let req_body = CreateOrUpdatePackageRequest {
+        identifier: name,
+        package_type: metadata_details.package_type,
+        lang: metadata_details.lang.to_string(),
+        version,
+        organization_id: organization,
+        description,
+        dependencies: dependencies_list,
+        env: env.to_string(),
+        repo_origin: Some(releaser_config.settings.git_url_prefix),
+        quick_links: Some(Some(links_str)),
+    };
+    println!("Request body: {:?}", req_body);
+
     match metadata_create_or_update_package(
         metadata_config,
         MetadataCreateOrUpdatePackageParams {
-            create_or_update_package_request: CreateOrUpdatePackageRequest {
-                identifier: name,
-                package_type: metadata_details.package_type,
-                lang: metadata_details.lang.to_string(),
-                version,
-                organization_id: organization,
-                description,
-                dependencies: dependencies_list,
-                env: env.to_string(),
-                repo_origin: Some(releaser_config.settings.git_url_prefix),
-            },
+            create_or_update_package_request: req_body,
         },
     )
     .await

@@ -1,13 +1,12 @@
-use core::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 use generate::generate_arbitrary_client;
 use ginger_shared_rs::utils::split_slug;
-use ginger_shared_rs::LANG;
+use ginger_shared_rs::{Environment, LANG};
 use init::initialize;
 use publish::publish_metadata;
 use serde_json::Value;
@@ -93,27 +92,6 @@ enum Commands {
     },
 }
 
-#[derive(ValueEnum, Clone, PartialEq)]
-enum Environment {
-    Dev,
-    Stage,
-    Prod,
-    ProdK8,
-    StageK8,
-}
-
-impl fmt::Display for Environment {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Environment::Dev => write!(f, "dev"),
-            Environment::Stage => write!(f, "stage"),
-            Environment::Prod => write!(f, "prod"),
-            Environment::ProdK8 => write!(f, "prod_k8"),
-            Environment::StageK8 => write!(f, "stage_k8"),
-        }
-    }
-}
-
 #[tokio::main]
 async fn check_session_gurad(
     cli: CLI,
@@ -134,7 +112,6 @@ async fn check_session_gurad(
                         println!("db-compose.toml not found. Running the register command.");
                         register_package(
                             package_path,
-                            &iam_config,
                             &metadata_config,
                             config_path,
                             env.clone(),
@@ -159,7 +136,14 @@ async fn check_session_gurad(
                     generate_arbitrary_client(swagger_path, lang.clone(), server_url, out_folder);
                 }
                 Commands::Publish { env } => {
-                    publish_metadata(config_path, env.clone(), metadata_config, releaser_path).await
+                    publish_metadata(
+                        config_path,
+                        env.clone(),
+                        metadata_config,
+                        releaser_path,
+                        package_path,
+                    )
+                    .await
                 }
                 Commands::UpdatePipeline { env, status } => {
                     update_pipeline(

@@ -12,7 +12,7 @@ MetadataService = {path = "./MetadataService_client"}
 clap = {version = "4.3.10", features = ["derive"]}
 colored = {version = "2.0.1"}
 dirs = "5.0.1"
-ginger-shared-rs = {version = "0.13.0-nightly.0", organization = "ginger-society"}
+ginger-shared-rs = {version = "0.25.0-nightly.0", organization = "ginger-society"}
 inquire = {version = "0.6.2", features = ["date"]}
 reqwest = {version = "0.12.5", features = ["json"]}
 serde = {version = "1.0.166", features = ["derive"]}

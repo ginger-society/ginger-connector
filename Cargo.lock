@@ -16,7 +16,7 @@ dependencies = [
 
 [[package]]
 name = "MetadataService"
-version = "0.4.0-nightly.0"
+version = "0.6.0-nightly.0"
 dependencies = [
  "reqwest",
  "serde",
@@ -495,12 +495,14 @@ dependencies = [
 
 [[package]]
 name = "ginger-shared-rs"
-version = "0.13.0-nightly.0"
+version = "0.25.0-nightly.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d45da513e4e30da038d85802bc47a031b8abeaf3e41232f95d4d7ccd8ed2327"
+checksum = "b23637c38f1630d735a950baa7fae45ac429968d0288ea0e0f26e3ec372adb87"
 dependencies = [
  "clap",
+ "dirs",
  "serde",
+ "serde_json",
  "toml",
 ]
 

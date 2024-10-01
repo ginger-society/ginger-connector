@@ -20,6 +20,8 @@ fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base
 
     let language = match lang {
         LANG::TS => String::from("typescript-fetch"),
+        LANG::Rust => String::from("rust"),
+        LANG::Python => String::from("python"),
         _ => lang.to_string(),
     };
 
