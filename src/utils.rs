@@ -1,4 +1,8 @@
-use std::{collections::HashMap, path::Path, process::exit};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+    process::exit,
+};
 
 use colored::Colorize;
 use ginger_shared_rs::{
@@ -12,10 +16,12 @@ use MetadataService::{
         configuration::Configuration as MetadataConfiguration,
         default_api::{
             metadata_create_dbschema, metadata_create_or_update_package,
-            metadata_get_services_and_envs, metadata_update_dbschema,
-            metadata_update_pipeline_status, MetadataCreateDbschemaParams,
-            MetadataCreateOrUpdatePackageParams, MetadataGetServicesAndEnvsParams,
-            MetadataUpdateDbschemaParams, MetadataUpdatePipelineStatusParams,
+            metadata_get_dbschemas_and_tables, metadata_get_services_and_envs,
+            metadata_get_user_packages, metadata_update_dbschema, metadata_update_pipeline_status,
+            MetadataCreateDbschemaParams, MetadataCreateOrUpdatePackageParams,
+            MetadataGetDbschemasAndTablesParams, MetadataGetServicesAndEnvsParams,
+            MetadataGetUserPackagesParams, MetadataUpdateDbschemaParams,
+            MetadataUpdatePipelineStatusParams,
         },
     },
     models::{
@@ -103,7 +109,7 @@ pub async fn update_pipeline(
             println!("{:?}", status);
         }
         Err(e) => {
-            println!("{:?}", e);
+            println!("Error calling metadata_update_pipeline_status{:?}", e);
         }
     }
 }
@@ -273,6 +279,169 @@ pub async fn register_package(
             println!("Unable to register this package")
         }
     };
+}
+fn find_pipelines_to_trigger(
+    dependencies_map: &HashMap<String, Vec<String>>,
+    pivot_package: &String,
+    triggered_set: &mut HashSet<String>,
+) -> Vec<String> {
+    let mut result = Vec::new();
+
+    // Find all packages that directly depend on the pivot_package
+    for (package, dependencies) in dependencies_map {
+        if dependencies.contains(pivot_package) {
+            // Check if any of the dependencies of this package are already in the triggered set
+            let has_triggered_dependency =
+                dependencies.iter().any(|dep| triggered_set.contains(dep));
+
+            // Only add the package if none of its dependencies are in the triggered set
+            if !has_triggered_dependency {
+                // Check recursively if we can add this package
+                let sub_dependencies =
+                    find_pipelines_to_trigger(dependencies_map, package, triggered_set);
+
+                // Add the current package to the result
+                result.push(package.clone());
+
+                // Add the sub-dependencies to the result
+                result.extend(sub_dependencies);
+            }
+        }
+    }
+
+    // Add the pivot_package to the triggered set
+    triggered_set.insert(pivot_package.clone());
+
+    // Filter out packages that have dependencies which are already in the result
+    let filtered_result: Vec<String> = result
+        .clone()
+        .into_iter()
+        .filter(|pkg| {
+            let a = &vec![];
+            let deps = dependencies_map.get(pkg).unwrap_or(a);
+            !deps.iter().any(|dep| result.contains(dep))
+        })
+        .collect();
+
+    // Return the filtered result without duplicates
+    filtered_result
+        .into_iter()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+pub async fn fetch_dependent_pipelines(
+    config_path: &Path,
+    iam_config: &IAMConfiguration,
+    metadata_config: &MetadataConfiguration,
+) {
+    let config = read_service_config_file(config_path).unwrap();
+
+    let (mut current_package_name, version, description, organization, internal_dependencies) =
+        match config.lang {
+            LANG::TS => get_package_json_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from package.json");
+                exit(1);
+            }),
+            LANG::Rust => get_cargo_toml_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from Cargo.toml");
+                exit(1);
+            }),
+            LANG::Python => {
+                // Implement similar logic for Python if needed
+                unimplemented!()
+            }
+        };
+
+    println!(
+        "org , {} , {}",
+        config.organization_id, current_package_name
+    );
+
+    let mut dependencies_map: HashMap<String, Vec<String>> = HashMap::new();
+
+    match metadata_get_user_packages(
+        metadata_config,
+        MetadataGetUserPackagesParams {
+            org_id: config.organization_id.clone(),
+            env: "stage".to_string(),
+        },
+    )
+    .await
+    {
+        Ok(packages) => {
+            for pkg in packages {
+                dependencies_map.insert(
+                    format!(
+                        "@{}/{}",
+                        config.organization_id.clone(),
+                        pkg.identifier.clone()
+                    ),
+                    pkg.dependencies.clone(),
+                );
+            }
+        }
+        Err(_) => todo!(),
+    }
+
+    match metadata_get_dbschemas_and_tables(
+        metadata_config,
+        MetadataGetDbschemasAndTablesParams {
+            org_id: config.organization_id.clone(),
+            env: "stage".to_string(),
+        },
+    )
+    .await
+    {
+        Ok(schemas) => {
+            match metadata_get_services_and_envs(
+                metadata_config,
+                MetadataGetServicesAndEnvsParams {
+                    page_number: Some("1".to_string()),
+                    page_size: Some("50".to_string()),
+                    org_id: config.organization_id.clone(),
+                },
+            )
+            .await
+            {
+                Ok(services) => {
+                    for service in services {
+                        let mut dependencies = service.dependencies.clone();
+
+                        for schema in schemas.clone() {
+                            if schema.identifier == service.db_schema_id {
+                                dependencies.push(format!(
+                                    "@{}/{}",
+                                    config.organization_id.clone(),
+                                    schema.name
+                                ));
+                            }
+                        }
+                        dependencies_map.insert(
+                            format!(
+                                "@{}/{}",
+                                config.organization_id.clone(),
+                                service.identifier.clone()
+                            ),
+                            dependencies,
+                        );
+                    }
+                }
+                Err(_) => todo!(),
+            }
+        }
+        Err(_) => todo!(),
+    }
+    println!("{:?}", dependencies_map);
+
+    let mut triggered_set = HashSet::new();
+    let pipelines = find_pipelines_to_trigger(
+        &dependencies_map,
+        &"@ginger-society/dev-portal".to_string(),
+        &mut triggered_set,
+    );
+    println!("Pipelines : {:?}", pipelines);
 }
 
 pub async fn fetch_metadata_and_process(

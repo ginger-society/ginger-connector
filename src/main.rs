@@ -11,7 +11,10 @@ use init::initialize;
 use publish::publish_metadata;
 use serde_json::Value;
 use service::{generate_client, generate_references};
-use utils::{fetch_metadata_and_process, register_db, register_package, update_pipeline};
+use utils::{
+    fetch_dependent_pipelines, fetch_metadata_and_process, register_db, register_package,
+    update_pipeline,
+};
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::apis::default_api::identity_validate_api_token;
 use IAMService::get_configuration as get_iam_configuration;
@@ -55,6 +58,8 @@ enum Commands {
     },
     /// Configures a service to a project
     Config,
+    /// Configures a service to a project
+    TriggerDependentPipelines,
     /// Connect to an environment
     Connect {
         #[clap(value_enum, default_value_t=Environment::Dev)]
@@ -104,6 +109,9 @@ async fn check_session_gurad(
     match identity_validate_api_token(&iam_config).await {
         Ok(response) => {
             match &cli.command {
+                Commands::TriggerDependentPipelines {} => {
+                    fetch_dependent_pipelines(config_path, &iam_config, &metadata_config).await;
+                }
                 Commands::Config {} => {
                     fetch_metadata_and_process(config_path, &iam_config, &metadata_config).await;
                 }
@@ -245,6 +253,7 @@ fn main() {
     };
 
     let iam_config: IAMConfiguration = get_iam_configuration(Some(token.clone()));
+    println!("{:?}", token);
     let metadata_config: MetadataConfiguration = get_metadata_configuration(Some(token.clone()));
 
     check_session_gurad(
