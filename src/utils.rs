@@ -370,10 +370,10 @@ pub async fn fetch_dependent_pipelines(
                 eprintln!("Failed to get name and version from Cargo.toml");
                 exit(1);
             }),
-            LANG::Python => {
-                // Implement similar logic for Python if needed
-                unimplemented!()
-            }
+            LANG::Python => get_pyproject_toml_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from pyproject.toml");
+                exit(1);
+            }),
         };
 
     println!(
