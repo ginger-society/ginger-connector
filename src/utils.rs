@@ -3,7 +3,9 @@ use std::{
     collections::{HashMap, HashSet},
     path::Path,
     process::exit,
+    time::Duration,
 };
+use tokio::time::sleep;
 
 use colored::Colorize;
 use ginger_shared_rs::{
@@ -36,6 +38,23 @@ use crate::{
     publish::{get_cargo_toml_info, get_package_json_info, get_pyproject_toml_info},
     Environment,
 };
+
+fn extract_org_and_package(input: &str) -> Option<(String, String)> {
+    // Ensure the input starts with '@' and contains '/'
+    if input.starts_with('@') && input.contains('/') {
+        // Split the input at '/' and collect the parts
+        let parts: Vec<&str> = input.split('/').collect();
+
+        // Ensure we have exactly 2 parts (org and package_name)
+        if parts.len() == 2 {
+            let org = parts[0].trim_start_matches('@').to_string(); // Remove the '@' from org
+            let package_name = parts[1].to_string(); // Package name
+            return Some((org, package_name));
+        }
+    }
+
+    None // Return None if the input is not in the expected format
+}
 
 pub async fn update_pipeline(
     package_path: &Path,
@@ -366,6 +385,8 @@ pub async fn fetch_dependent_pipelines(
 
     let mut repo_details_map: HashMap<String, Option<(String, String)>> = HashMap::new();
 
+    let mut repo_type_map: HashMap<String, String> = HashMap::new();
+
     match metadata_get_user_packages(
         metadata_config,
         MetadataGetUserPackagesParams {
@@ -387,6 +408,8 @@ pub async fn fetch_dependent_pipelines(
                     key.clone(),
                     extract_username_and_repo(&pkg.repo_origin.unwrap().unwrap()),
                 );
+
+                repo_type_map.insert(key.clone(), "package".to_string());
 
                 dependencies_map.insert(key.clone(), pkg.dependencies.clone());
             }
@@ -443,6 +466,7 @@ pub async fn fetch_dependent_pipelines(
                             key.clone(),
                             extract_username_and_repo(&service.repo_origin.unwrap().unwrap()),
                         );
+                        repo_type_map.insert(key.clone(), "service".to_string());
                     }
                 }
                 Err(_) => todo!(),
@@ -457,7 +481,7 @@ pub async fn fetch_dependent_pipelines(
         &format!(
             "@{}/{}",
             config.organization_id.clone(),
-            current_package_name
+            current_package_name.clone()
         ),
         &mut triggered_set,
     );
@@ -480,7 +504,6 @@ pub async fn fetch_dependent_pipelines(
                 "ref": "main" // Specify the branch to trigger the workflow
             });
 
-            println!("{:?} , {:?}", format!("Bearer {}", pipeline_token), url);
             // Make the POST request
             let response = client
                 .post(&url)
@@ -491,9 +514,34 @@ pub async fn fetch_dependent_pipelines(
                 .send()
                 .await;
 
+            let (org, pkg) = extract_org_and_package(&pipeline).unwrap();
             match response {
                 Ok(resp) if resp.status().is_success() => {
                     println!("Workflow dispatched for pipeline: {}", pipeline);
+                    match metadata_update_pipeline_status(
+                        &metadata_config,
+                        MetadataUpdatePipelineStatusParams {
+                            pipeline_status_update_request: {
+                                PipelineStatusUpdateRequest {
+                                    env: "stage".to_string(),
+                                    status: "waiting".to_string(),
+                                    update_type: repo_type_map.get(&pipeline).unwrap().to_string(),
+                                    org_id: org,
+                                    identifier: pkg,
+                                }
+                            },
+                        },
+                    )
+                    .await
+                    {
+                        Ok(status) => {
+                            println!("{:?}", status);
+                            sleep(Duration::from_secs(5)).await;
+                        }
+                        Err(e) => {
+                            println!("Error calling metadata_update_pipeline_status{:?}", e);
+                        }
+                    }
                 }
                 Ok(resp) => {
                     eprintln!(
