@@ -12,7 +12,7 @@ RUN apt install -y default-jdk
 # Install OpenAPI Generator CLI globally
 RUN npm install @openapitools/openapi-generator-cli -g
 
-RUN bash -c "$(curl -fsSL https://raw.githubusercontent.com/ginger-society/infra-as-code-repo/main/rust-helpers/install-all-clis.sh)"
+RUN bash -c "$(curl -fsSL https://raw.githubusercontent.com/ginger-society/infra-as-code-repo/main/rust-helpers/install-pipeline-clis.sh)"
 
 ARG GINGER_TOKEN
 ENV GINGER_TOKEN=$GINGER_TOKEN
