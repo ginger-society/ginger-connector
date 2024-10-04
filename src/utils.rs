@@ -2,7 +2,7 @@ use reqwest::Client;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
-    process::exit,
+    process::{exit, Command},
     time::Duration,
 };
 use tokio::time::sleep;
@@ -20,10 +20,12 @@ use MetadataService::{
         configuration::Configuration as MetadataConfiguration,
         default_api::{
             metadata_create_dbschema, metadata_create_or_update_package,
-            metadata_get_dbschemas_and_tables, metadata_get_services_and_envs,
+            metadata_get_dbschemas_and_tables, metadata_get_package_version,
+            metadata_get_package_version_plain_text, metadata_get_services_and_envs,
             metadata_get_user_packages, metadata_update_dbschema, metadata_update_pipeline_status,
             MetadataCreateDbschemaParams, MetadataCreateOrUpdatePackageParams,
-            MetadataGetDbschemasAndTablesParams, MetadataGetServicesAndEnvsParams,
+            MetadataGetDbschemasAndTablesParams, MetadataGetPackageVersionParams,
+            MetadataGetPackageVersionPlainTextParams, MetadataGetServicesAndEnvsParams,
             MetadataGetUserPackagesParams, MetadataUpdateDbschemaParams,
             MetadataUpdatePipelineStatusParams,
         },
@@ -36,6 +38,7 @@ use MetadataService::{
 
 use crate::{
     publish::{get_cargo_toml_info, get_package_json_info, get_pyproject_toml_info},
+    refresher::update_python_internal_dependency,
     Environment,
 };
 
@@ -350,6 +353,111 @@ fn find_pipelines_to_trigger(
         .collect::<HashSet<_>>()
         .into_iter()
         .collect()
+}
+
+pub async fn refresh_internal_dependency_versions(
+    config_path: &Path,
+    metadata_config: &MetadataConfiguration,
+    releaser_path: &Path,
+    package_path: &Path,
+) {
+    let config = read_service_config_file(config_path).unwrap();
+
+    let (mut current_package_name, version, description, organization, internal_dependencies) =
+        match config.lang {
+            LANG::TS => get_package_json_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from package.json");
+                exit(1);
+            }),
+            LANG::Rust => get_cargo_toml_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from Cargo.toml");
+                exit(1);
+            }),
+            LANG::Python => get_pyproject_toml_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from pyproject.toml");
+                exit(1);
+            }),
+        };
+
+    println!(
+        "org , {} , {} , {:?}",
+        config.organization_id, current_package_name, internal_dependencies
+    );
+
+    for dependency in internal_dependencies {
+        println!("{:?}", dependency);
+
+        let (org, pkg) = extract_org_and_package(&dependency).unwrap();
+        match metadata_get_package_version(
+            &metadata_config,
+            MetadataGetPackageVersionParams {
+                org_id: org,
+                package_name: pkg.clone(),
+            },
+        )
+        .await
+        {
+            Ok(new_version) => {
+                match config.lang {
+                    LANG::Python => update_python_internal_dependency(
+                        &dependency,
+                        "0.3.2",
+                        &config.organization_id,
+                    ),
+                    LANG::TS => {
+                        // Run the pnpm add command to update the dependency
+                        let pnpm_command =
+                            format!("pnpm add {}@{}", dependency, new_version.version);
+
+                        let output = Command::new("sh")
+                            .arg("-c")
+                            .arg(&pnpm_command)
+                            .output()
+                            .expect("Failed to run pnpm add command");
+
+                        if !output.status.success() {
+                            eprintln!(
+                                "Failed to update TypeScript dependency: {}. Error: {}",
+                                dependency,
+                                String::from_utf8_lossy(&output.stderr)
+                            );
+                        } else {
+                            println!(
+                                "Successfully updated TypeScript dependency: @{}{} to version {}.",
+                                config.organization_id, dependency, new_version.version
+                            );
+                        }
+                    }
+                    LANG::Rust => {
+                        // Run the cargo add command to update the Rust dependency
+                        let cargo_command = format!("cargo add {}@{}", pkg, new_version.version);
+
+                        let output = Command::new("sh")
+                            .arg("-c")
+                            .arg(&cargo_command)
+                            .output()
+                            .expect("Failed to run cargo add command");
+
+                        if !output.status.success() {
+                            eprintln!(
+                                "Failed to update Rust dependency: {}. Error: {}",
+                                dependency,
+                                String::from_utf8_lossy(&output.stderr)
+                            );
+                        } else {
+                            println!(
+                                "Successfully updated Rust dependency: {} to version {}.",
+                                dependency, new_version.version
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                println!("{:?}", e);
+            }
+        }
+    }
 }
 
 pub async fn fetch_dependent_pipelines(

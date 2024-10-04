@@ -12,8 +12,8 @@ use publish::publish_metadata;
 use serde_json::Value;
 use service::{generate_client, generate_references};
 use utils::{
-    fetch_dependent_pipelines, fetch_metadata_and_process, register_db, register_package,
-    update_pipeline,
+    fetch_dependent_pipelines, fetch_metadata_and_process, refresh_internal_dependency_versions,
+    register_db, register_package, update_pipeline,
 };
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::apis::default_api::identity_validate_api_token;
@@ -30,6 +30,7 @@ use MetadataService::{
 mod generate;
 mod init;
 mod publish;
+mod refresher;
 mod service;
 mod utils;
 
@@ -59,7 +60,9 @@ enum Commands {
     /// Configures a service to a project
     Config,
     /// Configures a service to a project
-    TriggerDependentPipelines { pipeline_token: String },
+    TriggerDependentPipelines {
+        pipeline_token: String,
+    },
     /// Connect to an environment
     Connect {
         #[clap(value_enum, default_value_t=Environment::Dev)]
@@ -95,6 +98,7 @@ enum Commands {
         #[clap(value_parser)]
         out_folder: String,
     },
+    Refresh,
 }
 
 #[tokio::main]
@@ -109,6 +113,15 @@ async fn check_session_gurad(
     match identity_validate_api_token(&iam_config).await {
         Ok(response) => {
             match &cli.command {
+                Commands::Refresh => {
+                    refresh_internal_dependency_versions(
+                        config_path,
+                        &metadata_config,
+                        releaser_path,
+                        package_path,
+                    )
+                    .await
+                }
                 Commands::TriggerDependentPipelines { pipeline_token } => {
                     fetch_dependent_pipelines(
                         config_path,
