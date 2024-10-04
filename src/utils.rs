@@ -403,8 +403,8 @@ pub async fn refresh_internal_dependency_versions(
             Ok(new_version) => {
                 match config.lang {
                     LANG::Python => update_python_internal_dependency(
-                        &dependency,
-                        "0.3.2",
+                        &pkg,
+                        &new_version.version,
                         &config.organization_id,
                     ),
                     LANG::TS => {
