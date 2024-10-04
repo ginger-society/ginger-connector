@@ -13,7 +13,7 @@ use serde_json::Value;
 use service::{generate_client, generate_references};
 use utils::{
     fetch_dependent_pipelines, fetch_metadata_and_process, refresh_internal_dependency_versions,
-    register_db, register_package, update_pipeline,
+    register_db, register_package, system_check, update_pipeline,
 };
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::apis::default_api::identity_validate_api_token;
@@ -59,6 +59,10 @@ enum Commands {
     },
     /// Configures a service to a project
     Config,
+    /// Configures a service to a project
+    SystemCheck {
+        pipeline_token: String,
+    },
     /// Configures a service to a project
     TriggerDependentPipelines {
         pipeline_token: String,
@@ -113,14 +117,11 @@ async fn check_session_gurad(
     match identity_validate_api_token(&iam_config).await {
         Ok(response) => {
             match &cli.command {
+                Commands::SystemCheck { pipeline_token } => {
+                    system_check(config_path, &iam_config, &metadata_config, pipeline_token).await
+                }
                 Commands::Refresh => {
-                    refresh_internal_dependency_versions(
-                        config_path,
-                        &metadata_config,
-                        releaser_path,
-                        package_path,
-                    )
-                    .await
+                    refresh_internal_dependency_versions(config_path, &metadata_config).await
                 }
                 Commands::TriggerDependentPipelines { pipeline_token } => {
                     fetch_dependent_pipelines(

@@ -306,6 +306,7 @@ pub async fn register_package(
         }
     };
 }
+
 fn find_pipelines_to_trigger(
     dependencies_map: &HashMap<String, Vec<String>>,
     pivot_package: &String,
@@ -357,11 +358,23 @@ fn find_pipelines_to_trigger(
         .collect()
 }
 
+fn find_entry_points_to_trigger(dependencies_map: &HashMap<String, Vec<String>>) -> Vec<String> {
+    let mut result = Vec::new();
+
+    // Iterate through the HashMap
+    for (key, value) in dependencies_map {
+        // Check if the Vec<String> has a length of 0
+        if value.is_empty() {
+            result.push(key.clone()); // Add the key to the result if the Vec is empty
+        }
+    }
+
+    result // Return the result vector
+}
+
 pub async fn refresh_internal_dependency_versions(
     config_path: &Path,
     metadata_config: &MetadataConfiguration,
-    releaser_path: &Path,
-    package_path: &Path,
 ) {
     let config = read_service_config_file(config_path).unwrap();
 
@@ -460,6 +473,180 @@ pub async fn refresh_internal_dependency_versions(
             Err(e) => {
                 println!("{:?}", e);
             }
+        }
+    }
+}
+
+pub async fn system_check(
+    config_path: &Path,
+    iam_config: &IAMConfiguration,
+    metadata_config: &MetadataConfiguration,
+    pipeline_token: &String,
+) {
+    let config = read_service_config_file(config_path).unwrap();
+
+    let (mut current_package_name, version, description, organization, internal_dependencies) =
+        match config.lang {
+            LANG::TS => get_package_json_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from package.json");
+                exit(1);
+            }),
+            LANG::Rust => get_cargo_toml_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from Cargo.toml");
+                exit(1);
+            }),
+            LANG::Python => get_pyproject_toml_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from pyproject.toml");
+                exit(1);
+            }),
+            LANG::Shell => todo!(),
+        };
+
+    println!(
+        "org , {} , {}",
+        config.organization_id, current_package_name
+    );
+
+    let mut dependencies_map: HashMap<String, Vec<String>> = HashMap::new();
+
+    let mut repo_details_map: HashMap<String, Option<(String, String)>> = HashMap::new();
+
+    let mut repo_type_map: HashMap<String, String> = HashMap::new();
+
+    match metadata_get_user_packages(
+        metadata_config,
+        MetadataGetUserPackagesParams {
+            org_id: config.organization_id.clone(),
+            env: "stage".to_string(),
+        },
+    )
+    .await
+    {
+        Ok(packages) => {
+            for pkg in packages {
+                let key = format!(
+                    "@{}/{}",
+                    config.organization_id.clone(),
+                    pkg.identifier.clone()
+                );
+
+                repo_details_map.insert(
+                    key.clone(),
+                    extract_username_and_repo(&pkg.repo_origin.unwrap().unwrap()),
+                );
+
+                repo_type_map.insert(key.clone(), "package".to_string());
+
+                dependencies_map.insert(key.clone(), pkg.dependencies.clone());
+            }
+        }
+        Err(_) => todo!(),
+    }
+
+    match metadata_get_services_and_envs(
+        metadata_config,
+        MetadataGetServicesAndEnvsParams {
+            page_number: Some("1".to_string()),
+            page_size: Some("50".to_string()),
+            org_id: config.organization_id.clone(),
+        },
+    )
+    .await
+    {
+        Ok(services) => {
+            for service in services {
+                let key = format!(
+                    "@{}/{}",
+                    config.organization_id.clone(),
+                    service.identifier.clone()
+                );
+
+                dependencies_map.insert(key.clone(), service.dependencies.clone());
+
+                repo_details_map.insert(
+                    key.clone(),
+                    extract_username_and_repo(&service.repo_origin.unwrap().unwrap()),
+                );
+                repo_type_map.insert(key.clone(), "service".to_string());
+            }
+        }
+        Err(_) => todo!(),
+    }
+
+    let pipelines = find_entry_points_to_trigger(&dependencies_map);
+
+    println!("Pipelines : {:?}", pipelines);
+
+    let client = Client::new();
+    for pipeline in pipelines {
+        if let Some((repo_owner, repo_name)) =
+            repo_details_map.get(&pipeline).and_then(|x| x.clone())
+        {
+            // Set the request URL for dispatching the workflow
+            let url = format!(
+                "https://api.github.com/repos/{}/{}/actions/workflows/CI.yml/dispatches",
+                repo_owner, repo_name
+            );
+
+            // Prepare the JSON body
+            let body = json!({
+                "ref": "main" // Specify the branch to trigger the workflow
+            });
+
+            // Make the POST request
+            let response = client
+                .post(&url)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "ginger-connector") // Added User-Agent header
+                .header("Authorization", format!("Bearer {}", pipeline_token))
+                .json(&body)
+                .send()
+                .await;
+
+            let (org, pkg) = extract_org_and_package(&pipeline).unwrap();
+            match response {
+                Ok(resp) if resp.status().is_success() => {
+                    println!("Workflow dispatched for pipeline: {}", pipeline);
+                    match metadata_update_pipeline_status(
+                        &metadata_config,
+                        MetadataUpdatePipelineStatusParams {
+                            pipeline_status_update_request: {
+                                PipelineStatusUpdateRequest {
+                                    env: "stage".to_string(),
+                                    status: "waiting".to_string(),
+                                    update_type: repo_type_map.get(&pipeline).unwrap().to_string(),
+                                    org_id: org,
+                                    identifier: pkg,
+                                }
+                            },
+                        },
+                    )
+                    .await
+                    {
+                        Ok(status) => {
+                            println!("{:?}", status);
+                            sleep(Duration::from_secs(5)).await;
+                        }
+                        Err(e) => {
+                            println!("Error calling metadata_update_pipeline_status{:?}", e);
+                        }
+                    }
+                }
+                Ok(resp) => {
+                    eprintln!(
+                        "Failed to dispatch workflow for pipeline {}: Status Code: {} {:?}",
+                        pipeline,
+                        resp.status(),
+                        resp
+                    );
+                }
+                Err(e) => eprintln!(
+                    "Error occurred while dispatching workflow for pipeline {}: {:?}",
+                    pipeline, e
+                ),
+            }
+        } else {
+            eprintln!("Repo details not found for pipeline: {}", pipeline);
         }
     }
 }
