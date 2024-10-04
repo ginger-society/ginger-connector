@@ -273,6 +273,7 @@ pub async fn publish_metadata(
             eprintln!("Failed to get name and version from pyproject.toml");
             exit(1);
         }),
+        LANG::Shell => todo!(),
     };
 
     if services_config.override_name.is_some() {

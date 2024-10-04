@@ -51,6 +51,7 @@ fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base
             }
 
             match lang {
+                LANG::Shell => todo!(),
                 LANG::Rust => {
                     println!(
                         "please add \n\n{} = {{ path = \"{}\" }}\n\n in cargo.toml file if not added",

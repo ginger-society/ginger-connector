@@ -84,6 +84,7 @@ pub async fn update_pipeline(
                 eprintln!("Failed to get name and version from pyproject.toml");
                 exit(1);
             }),
+            LANG::Shell => todo!(),
         };
 
     let services_config = match read_service_config_file(config_path) {
@@ -267,6 +268,7 @@ pub async fn register_package(
                 eprintln!("Failed to get name and version from pyproject.toml");
                 exit(1);
             }),
+            LANG::Shell => todo!(),
         };
 
     println!("{:?} {:?}", releaser_config, version);
@@ -377,6 +379,7 @@ pub async fn refresh_internal_dependency_versions(
                 eprintln!("Failed to get name and version from pyproject.toml");
                 exit(1);
             }),
+            LANG::Shell => todo!(),
         };
 
     println!(
@@ -451,6 +454,7 @@ pub async fn refresh_internal_dependency_versions(
                             );
                         }
                     }
+                    LANG::Shell => todo!(),
                 }
             }
             Err(e) => {
@@ -482,6 +486,7 @@ pub async fn fetch_dependent_pipelines(
                 eprintln!("Failed to get name and version from pyproject.toml");
                 exit(1);
             }),
+            LANG::Shell => todo!(),
         };
 
     println!(
@@ -728,6 +733,7 @@ pub async fn fetch_metadata_and_process(
                     // Implement similar logic for Python if needed
                     unimplemented!()
                 }
+                LANG::Shell => todo!(),
             };
 
             if config.override_name.is_some() {

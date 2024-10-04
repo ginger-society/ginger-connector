@@ -46,6 +46,7 @@ pub fn generate_arbitrary_client(
                 }
                 println!("Client generated successfully in directory: {}", output_dir);
                 match lang {
+                    LANG::Shell => todo!(),
                     LANG::Rust => todo!(),
                     LANG::TS => {
                         let index_ts_content = format!(
