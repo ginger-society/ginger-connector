@@ -322,20 +322,34 @@ export default client
 
                     // import IAMService.models
                     // from IAMService import rest
-
-                    replace_in_file(
+                    println!("{}", format!("import {}.models", service.name));
+                    match replace_in_file(
                         &format!("{}/{}/api_client.py", output_dir, service.name),
                         &format!("import {}.models", service.name),
                         &format!("import {}_client.{}.models", service.name, service.name),
-                    )
-                    .unwrap();
-
-                    replace_in_file(
-                        &format!("{}/{}/api_client.py", output_dir, service.name),
-                        &format!("from {} import rest", service.name),
-                        &format!("from {}_client.{} import rest", service.name, service.name),
-                    )
-                    .unwrap();
+                    ) {
+                        Ok(_) => {
+                            match replace_in_file(
+                                &format!("{}/{}/api_client.py", output_dir, service.name),
+                                &format!("({}.models", service.name),
+                                &format!("({}_client.{}.models", service.name, service.name),
+                            ) {
+                                Ok(_) => {
+                                    replace_in_file(
+                                        &format!("{}/{}/api_client.py", output_dir, service.name),
+                                        &format!("from {} import rest", service.name),
+                                        &format!(
+                                            "from {}_client.{} import rest",
+                                            service.name, service.name
+                                        ),
+                                    )
+                                    .unwrap();
+                                }
+                                Err(_) => {}
+                            };
+                        }
+                        Err(_) => {}
+                    };
 
                     replace_in_file(
                         &format!("{}/{}/rest.py", output_dir, service.name),
@@ -343,6 +357,66 @@ export default client
                         &format!("from {}_client.{}.", service.name, service.name),
                     )
                     .unwrap();
+
+                    let config_file_content = format!(
+                        r#"
+import certifi
+from IAMService_client.IAMService import (
+    Configuration,
+)
+
+
+def get_configuration(access_token):
+
+    if access_token is None:
+        return Configuration(
+            host="{url}",
+            ssl_ca_cert=certifi.where(),
+        )
+    else:
+        return Configuration(
+            host="{url}",
+            ssl_ca_cert=certifi.where(),
+            api_key={{
+                "BearerAuth": access_token
+            }},  # Set the access token with 'BearerAuth' identifier
+            api_key_prefix={{"BearerAuth": "Bearer"}},
+        )
+
+
+def get_api_configuration(access_token):
+
+    if access_token is None:
+        return Configuration(
+            host="{url}",
+            ssl_ca_cert=certifi.where(),
+        )
+    else:
+        return Configuration(
+            host="{url}",
+            ssl_ca_cert=certifi.where(),
+            api_key={{
+                "BearerAPIAuth": access_token
+            }},  # Set the access token with 'BearerAuth' identifier
+            api_key_prefix={{"BearerAPIAuth": "Bearer"}},
+        )
+                        "#,
+                        url = base_url
+                    );
+
+                    match OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .truncate(true)
+                        .open(format!("{}/{}/config_utils.py", output_dir, service.name))
+                    {
+                        Ok(mut file) => {
+                            if let Err(e) = file.write_all(config_file_content.as_bytes()) {
+                                eprintln!("Error writing to config_utils.py: {:?}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("Error config_utils.py: {:?}", e),
+                    }
                 }
             }
         }
