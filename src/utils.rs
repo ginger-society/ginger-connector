@@ -485,28 +485,6 @@ pub async fn system_check(
 ) {
     let config = read_service_config_file(config_path).unwrap();
 
-    let (mut current_package_name, version, description, organization, internal_dependencies) =
-        match config.lang {
-            LANG::TS => get_package_json_info().unwrap_or_else(|| {
-                eprintln!("Failed to get name and version from package.json");
-                exit(1);
-            }),
-            LANG::Rust => get_cargo_toml_info().unwrap_or_else(|| {
-                eprintln!("Failed to get name and version from Cargo.toml");
-                exit(1);
-            }),
-            LANG::Python => get_pyproject_toml_info().unwrap_or_else(|| {
-                eprintln!("Failed to get name and version from pyproject.toml");
-                exit(1);
-            }),
-            LANG::Shell => todo!(),
-        };
-
-    println!(
-        "org , {} , {}",
-        config.organization_id, current_package_name
-    );
-
     let mut dependencies_map: HashMap<String, Vec<String>> = HashMap::new();
 
     let mut repo_details_map: HashMap<String, Option<(String, String)>> = HashMap::new();
@@ -592,6 +570,8 @@ pub async fn system_check(
             let body = json!({
                 "ref": "main" // Specify the branch to trigger the workflow
             });
+
+            println!("URL : {}", url);
 
             // Make the POST request
             let response = client
@@ -916,10 +896,10 @@ pub async fn fetch_metadata_and_process(
                     eprintln!("Failed to get name and version from Cargo.toml");
                     exit(1);
                 }),
-                LANG::Python => {
-                    // Implement similar logic for Python if needed
-                    unimplemented!()
-                }
+                LANG::Python => get_pyproject_toml_info().unwrap_or_else(|| {
+                    eprintln!("Failed to get name and version from pyproject.toml");
+                    exit(1);
+                }),
                 LANG::Shell => todo!(),
             };
 

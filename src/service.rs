@@ -12,7 +12,7 @@ use MetadataService::apis::default_api::{
     metadata_get_service_and_env_by_id, MetadataGetServiceAndEnvByIdParams,
 };
 
-use crate::Environment;
+use crate::{file_utils::replace_in_file, Environment};
 
 fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base_url: &str) {
     let output_dir = format!("{}/{}_client", root_dir, service.name);
@@ -25,7 +25,8 @@ fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base
         _ => lang.to_string(),
     };
 
-    let output = Command::new("openapi-generator-cli")
+    let mut binding = Command::new("openapi-generator-cli");
+    let command = binding
         .arg("generate")
         .arg("-g")
         .arg(language)
@@ -37,8 +38,17 @@ fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base
             service.name
         ))
         .arg("-i")
-        .arg(service.schema_url.clone())
-        .output();
+        .arg(service.schema_url.clone());
+
+    // Add library option for Python
+    match lang {
+        LANG::Python => {
+            command.arg("--library").arg("urllib3"); // Specify the library to use
+        }
+        _ => {}
+    }
+
+    let output = command.output();
 
     match output {
         Ok(cmd_output) => {
@@ -269,7 +279,71 @@ export default client
                         Err(e) => eprintln!("Error creating index.ts: {:?}", e),
                     }
                 }
-                LANG::Python => todo!(),
+                LANG::Python => {
+                    // TODO
+                    // update
+
+                    let file_path_1 = &format!("{}/{}/__init__.py", output_dir, service.name);
+                    println!("{}", file_path_1);
+                    replace_in_file(
+                        file_path_1,
+                        &format!("from {}.", service.name),
+                        &format!("from {}_client.{}.", service.name, service.name),
+                    )
+                    .unwrap();
+
+                    replace_in_file(
+                        &format!("{}/{}/api/__init__.py", output_dir, service.name),
+                        &format!("from {}.", service.name),
+                        &format!("from {}_client.{}.", service.name, service.name),
+                    )
+                    .unwrap();
+
+                    replace_in_file(
+                        &format!("{}/{}/api/default_api.py", output_dir, service.name),
+                        &format!("from {}.", service.name),
+                        &format!("from {}_client.{}.", service.name, service.name),
+                    )
+                    .unwrap();
+
+                    replace_in_file(
+                        &format!("{}/{}/models/__init__.py", output_dir, service.name),
+                        &format!("from {}.", service.name),
+                        &format!("from {}_client.{}.", service.name, service.name),
+                    )
+                    .unwrap();
+
+                    replace_in_file(
+                        &format!("{}/{}/api_client.py", output_dir, service.name),
+                        &format!("from {}.", service.name),
+                        &format!("from {}_client.{}.", service.name, service.name),
+                    )
+                    .unwrap();
+
+                    // import IAMService.models
+                    // from IAMService import rest
+
+                    replace_in_file(
+                        &format!("{}/{}/api_client.py", output_dir, service.name),
+                        &format!("import {}.models", service.name),
+                        &format!("import {}_client.{}.models", service.name, service.name),
+                    )
+                    .unwrap();
+
+                    replace_in_file(
+                        &format!("{}/{}/api_client.py", output_dir, service.name),
+                        &format!("from {} import rest", service.name),
+                        &format!("from {}_client.{} import rest", service.name, service.name),
+                    )
+                    .unwrap();
+
+                    replace_in_file(
+                        &format!("{}/{}/rest.py", output_dir, service.name),
+                        &format!("from {}.", service.name),
+                        &format!("from {}_client.{}.", service.name, service.name),
+                    )
+                    .unwrap();
+                }
             }
         }
         Err(err) => {
