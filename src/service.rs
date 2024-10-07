@@ -448,7 +448,16 @@ pub fn generate_references(config_path: &Path, env: Environment) {
     };
 
     // Process services and generate references content
-    let mut references_content = format!("export const ENV_KEY=\"{env}\";\n");
+    let mut references_content = match services_config.lang {
+        LANG::TS => {
+            format!("export const ENV_KEY=\"{env}\";\n")
+        }
+        LANG::Rust => todo!(),
+        LANG::Python => {
+            format!("ENV_KEY=\"{env}\"\n")
+        }
+        LANG::Shell => todo!(),
+    };
 
     // Ensure portal_refs_file is specified in the configuration
     let portal_refs_file = match &services_config.portal_refs_file {
@@ -468,10 +477,20 @@ pub fn generate_references(config_path: &Path, env: Environment) {
                     .replace("@", "")
                     .replace("/", "_")
                     .to_uppercase();
-                references_content.push_str(&format!(
-                    "export const {} = '{}';\n",
-                    formatted_name, portal_url
-                ));
+                match services_config.lang {
+                    LANG::TS => {
+                        references_content.push_str(&format!(
+                            "export const {} = '{}';\n",
+                            formatted_name, portal_url
+                        ));
+                    }
+                    LANG::Rust => todo!(),
+                    LANG::Python => {
+                        references_content
+                            .push_str(&format!("{} = '{}'\n", formatted_name, portal_url));
+                    }
+                    LANG::Shell => todo!(),
+                }
             }
         }
     }
