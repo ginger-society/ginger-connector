@@ -867,7 +867,6 @@ pub async fn fetch_metadata_and_process(
     metadata_config: &MetadataConfiguration,
 ) {
     let mut config = read_service_config_file(config_path).unwrap();
-    println!("{:?}", config);
     match metadata_get_services_and_envs(
         metadata_config,
         MetadataGetServicesAndEnvsParams {
@@ -879,8 +878,6 @@ pub async fn fetch_metadata_and_process(
     .await
     {
         Ok(services) => {
-            println!("{:?}", services);
-
             let (
                 mut current_package_name,
                 version,
@@ -926,7 +923,7 @@ pub async fn fetch_metadata_and_process(
             let service_names: Vec<String> = services
                 .iter()
                 .filter(|s| s.identifier != current_package_name)
-                .map(|s| s.identifier.clone())
+                .map(|s| format!("@{}/{}", s.organization_id.clone(), s.identifier.clone()))
                 .collect();
 
             // Collect default selections for both services and portals
