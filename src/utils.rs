@@ -1,4 +1,7 @@
+use chrono::{Duration as ChronoDuration, Utc};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -10,7 +13,7 @@ use tokio::time::sleep;
 use colored::Colorize;
 use ginger_shared_rs::{
     read_db_config, read_package_metadata_file, read_releaser_config_file,
-    read_service_config_file, write_db_config, write_service_config_file, LANG,
+    read_service_config_file, write_db_config, write_service_config_file, ISCClaims, LANG,
 };
 use inquire::{list_option::ListOption, validator::Validation, MultiSelect};
 use serde_json::json;
@@ -475,6 +478,42 @@ pub async fn refresh_internal_dependency_versions(
             }
         }
     }
+}
+
+pub fn gen_ist(package_path: &Path, jwt_token: &String) {
+    let metadata_details = read_package_metadata_file(package_path).unwrap();
+    let (mut name, version, description, organization, internal_dependencies) =
+        match metadata_details.lang {
+            LANG::TS => get_package_json_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from package.json");
+                exit(1);
+            }),
+            LANG::Rust => get_cargo_toml_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from Cargo.toml");
+                exit(1);
+            }),
+            LANG::Python => get_pyproject_toml_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from pyproject.toml");
+                exit(1);
+            }),
+            LANG::Shell => todo!(),
+        };
+    let expiration = Utc::now() + ChronoDuration::days(365);
+
+    let isc_claim = ISCClaims {
+        sub: name,
+        exp: expiration.timestamp() as usize,
+        org_id: organization,
+        scopes: vec![],
+    };
+
+    let token = encode(
+        &Header::default(),
+        &isc_claim,
+        &EncodingKey::from_secret(jwt_token.as_ref()),
+    )
+    .unwrap();
+    println!("{:?}", token);
 }
 
 pub async fn system_check(

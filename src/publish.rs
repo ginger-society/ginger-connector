@@ -120,8 +120,6 @@ pub fn get_cargo_toml_info() -> Option<(String, String, String, String, Vec<Stri
             }
         }
 
-        println!("{:?}", internal_dependencies);
-
         Some((
             name,
             version,

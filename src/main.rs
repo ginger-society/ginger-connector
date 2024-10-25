@@ -12,8 +12,9 @@ use publish::publish_metadata;
 use serde_json::Value;
 use service::{generate_client, generate_references};
 use utils::{
-    fetch_dependent_pipelines, fetch_metadata_and_process, refresh_internal_dependency_versions,
-    register_db, register_package, system_check, update_pipeline,
+    fetch_dependent_pipelines, fetch_metadata_and_process, gen_ist,
+    refresh_internal_dependency_versions, register_db, register_package, system_check,
+    update_pipeline,
 };
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::apis::default_api::identity_validate_api_token;
@@ -60,25 +61,25 @@ enum Commands {
     },
     /// Configures a service to a project
     Config,
+    /// This triggers the lowest set of components with zero depedencies. This will bubble up to run everything once again
+    SystemCheck { pipeline_token: String },
+    /// Given the JWT secret , this generates a long live token that can be used to call inter service endpoints
+    GenIST { jwt_secret: String },
     /// Configures a service to a project
-    SystemCheck {
-        pipeline_token: String,
-    },
-    /// Configures a service to a project
-    TriggerDependentPipelines {
-        pipeline_token: String,
-    },
-    /// Connect to an environment
+    TriggerDependentPipelines { pipeline_token: String },
+    /// Connect to an environment and generate the client
     Connect {
         #[clap(value_enum, default_value_t=Environment::Dev)]
         env: Environment,
     },
+    /// this updates the pipeline statuses for components except for the DBs
     UpdatePipeline {
         #[clap(value_enum, default_value_t=Environment::Dev)]
         env: Environment,
         #[clap(value_parser)]
         status: String,
     },
+    /// this updates the DBs pipeline status
     UpdateDBPipeline {
         #[clap(value_enum, default_value_t=Environment::Dev)]
         env: Environment,
@@ -103,6 +104,7 @@ enum Commands {
         #[clap(value_parser)]
         out_folder: String,
     },
+    /// This updates all the internal dependencies packages versions, should be run in dev machine for a sanity test and then also in the pipelien
     Refresh,
 }
 
@@ -118,6 +120,7 @@ async fn check_session_gurad(
     match identity_validate_api_token(&iam_config).await {
         Ok(response) => {
             match &cli.command {
+                Commands::GenIST { jwt_secret } => gen_ist(package_path, jwt_secret),
                 Commands::SystemCheck { pipeline_token } => {
                     system_check(config_path, &iam_config, &metadata_config, pipeline_token).await
                 }
@@ -214,7 +217,7 @@ async fn check_session_gurad(
                 }
             };
 
-            println!("Token is valid: {:?}", response)
+            // println!("Token is valid: {:?}", response)
         }
         Err(error) => {
             println!("Token validation failed: {:?}", error);
