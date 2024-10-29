@@ -65,7 +65,7 @@ enum Commands {
     SystemCheck { pipeline_token: String },
     /// Given the JWT secret , this generates a long live token that can be used to call inter service endpoints
     GenIST { jwt_secret: String },
-    /// Configures a service to a project
+    /// Finds out and triggers the dependent pipelines
     TriggerDependentPipelines { pipeline_token: String },
     /// Connect to an environment and generate the client
     Connect {

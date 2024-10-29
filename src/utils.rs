@@ -319,14 +319,25 @@ fn find_pipelines_to_trigger(
 
     // Find all packages that directly depend on the pivot_package
     for (package, dependencies) in dependencies_map {
-        if dependencies.contains(pivot_package) {
+        // Skip if there's a mutual dependency between pivot_package and package
+        let package_depends_on_pivot = dependencies.contains(pivot_package);
+        let pivot_depends_on_package = dependencies_map
+            .get(pivot_package)
+            .map_or(false, |deps| deps.contains(package));
+
+        if package_depends_on_pivot && pivot_depends_on_package {
+            // Skip adding this package because of mutual dependency
+            continue;
+        }
+
+        if package_depends_on_pivot {
             // Check if any of the dependencies of this package are already in the triggered set
             let has_triggered_dependency =
                 dependencies.iter().any(|dep| triggered_set.contains(dep));
 
             // Only add the package if none of its dependencies are in the triggered set
             if !has_triggered_dependency {
-                // Check recursively if we can add this package
+                // Recursively find sub-dependencies to add
                 let sub_dependencies =
                     find_pipelines_to_trigger(dependencies_map, package, triggered_set);
 
@@ -347,8 +358,8 @@ fn find_pipelines_to_trigger(
         .clone()
         .into_iter()
         .filter(|pkg| {
-            let a = &vec![];
-            let deps = dependencies_map.get(pkg).unwrap_or(a);
+            let binding = vec![];
+            let deps = dependencies_map.get(pkg).unwrap_or(&binding);
             !deps.iter().any(|dep| result.contains(dep))
         })
         .collect();
