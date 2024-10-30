@@ -24,11 +24,12 @@ use MetadataService::{
         default_api::{
             metadata_create_dbschema, metadata_create_or_update_package,
             metadata_get_dbschemas_and_tables, metadata_get_package_version,
-            metadata_get_package_version_plain_text, metadata_get_services_and_envs,
-            metadata_get_user_packages, metadata_update_dbschema, metadata_update_pipeline_status,
-            MetadataCreateDbschemaParams, MetadataCreateOrUpdatePackageParams,
-            MetadataGetDbschemasAndTablesParams, MetadataGetPackageVersionParams,
-            MetadataGetPackageVersionPlainTextParams, MetadataGetServicesAndEnvsParams,
+            metadata_get_package_version_plain_text, metadata_get_service_by_id,
+            metadata_get_services_and_envs, metadata_get_user_packages, metadata_update_dbschema,
+            metadata_update_pipeline_status, MetadataCreateDbschemaParams,
+            MetadataCreateOrUpdatePackageParams, MetadataGetDbschemasAndTablesParams,
+            MetadataGetPackageVersionParams, MetadataGetPackageVersionPlainTextParams,
+            MetadataGetServiceByIdParams, MetadataGetServicesAndEnvsParams,
             MetadataGetUserPackagesParams, MetadataUpdateDbschemaParams,
             MetadataUpdatePipelineStatusParams,
         },
@@ -677,6 +678,118 @@ pub async fn system_check(
             }
         } else {
             eprintln!("Repo details not found for pipeline: {}", pipeline);
+        }
+    }
+}
+
+pub async fn trigger_pipeline(
+    config_path: &Path,
+    iam_config: &IAMConfiguration,
+    metadata_config: &MetadataConfiguration,
+    pipeline_token: &String,
+    id: &String,
+) {
+    let config = read_service_config_file(config_path).unwrap();
+
+    let (mut current_package_name, version, description, organization, internal_dependencies) =
+        match config.lang {
+            LANG::TS => get_package_json_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from package.json");
+                exit(1);
+            }),
+            LANG::Rust => get_cargo_toml_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from Cargo.toml");
+                exit(1);
+            }),
+            LANG::Python => get_pyproject_toml_info().unwrap_or_else(|| {
+                eprintln!("Failed to get name and version from pyproject.toml");
+                exit(1);
+            }),
+            LANG::Shell => todo!(),
+        };
+
+    match metadata_get_service_by_id(
+        &metadata_config,
+        MetadataGetServiceByIdParams {
+            service_identifier: id.to_string(),
+            org_id: organization.clone(),
+        },
+    )
+    .await
+    {
+        Ok(service) => {
+            if let Some((repo_owner, repo_name)) =
+                extract_username_and_repo(&service.repo_origin.unwrap().unwrap())
+            {
+                // Set the request URL for dispatching the workflow
+                let url = format!(
+                    "https://api.github.com/repos/{}/{}/actions/workflows/CI.yml/dispatches",
+                    repo_owner, repo_name
+                );
+
+                // Prepare the JSON body
+                let body = json!({
+                    "ref": "main" // Specify the branch to trigger the workflow
+                });
+                let client = Client::new();
+
+                // Make the POST request
+                let response = client
+                    .post(&url)
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "ginger-connector") // Added User-Agent header
+                    .header("Authorization", format!("Bearer {}", pipeline_token))
+                    .json(&body)
+                    .send()
+                    .await;
+
+                match response {
+                    Ok(resp) if resp.status().is_success() => {
+                        println!("Workflow dispatched for pipeline: {}", id);
+                        match metadata_update_pipeline_status(
+                            &metadata_config,
+                            MetadataUpdatePipelineStatusParams {
+                                pipeline_status_update_request: {
+                                    PipelineStatusUpdateRequest {
+                                        env: "stage".to_string(),
+                                        status: "waiting".to_string(),
+                                        update_type: "service".to_string(),
+                                        org_id: organization,
+                                        identifier: id.to_string(),
+                                    }
+                                },
+                            },
+                        )
+                        .await
+                        {
+                            Ok(status) => {
+                                println!("{:?}", status);
+                                sleep(Duration::from_secs(5)).await;
+                            }
+                            Err(e) => {
+                                println!("Error calling metadata_update_pipeline_status{:?}", e);
+                            }
+                        }
+                    }
+                    Ok(resp) => {
+                        eprintln!(
+                            "Failed to dispatch workflow for pipeline {}: Status Code: {} {:?}",
+                            id,
+                            resp.status(),
+                            resp
+                        );
+                    }
+                    Err(e) => eprintln!(
+                        "Error occurred while dispatching workflow for pipeline {}: {:?}",
+                        id, e
+                    ),
+                }
+            } else {
+                eprintln!("Repo details not found for pipeline: {}", id);
+            }
+        }
+        Err(e) => {
+            println!("{:?}", e);
         }
     }
 }

@@ -14,7 +14,7 @@ use service::{generate_client, generate_references};
 use utils::{
     fetch_dependent_pipelines, fetch_metadata_and_process, gen_ist,
     refresh_internal_dependency_versions, register_db, register_package, system_check,
-    update_pipeline,
+    trigger_pipeline, update_pipeline,
 };
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::apis::default_api::identity_validate_api_token;
@@ -67,6 +67,8 @@ enum Commands {
     GenIST { jwt_secret: String },
     /// Finds out and triggers the dependent pipelines
     TriggerDependentPipelines { pipeline_token: String },
+    /// Finds out and triggers the dependent pipelines
+    TriggerPipeline { id: String, pipeline_token: String },
     /// Connect to an environment and generate the client
     Connect {
         #[clap(value_enum, default_value_t=Environment::Dev)]
@@ -120,6 +122,17 @@ async fn check_session_gurad(
     match identity_validate_api_token(&iam_config).await {
         Ok(response) => {
             match &cli.command {
+                Commands::TriggerPipeline { id, pipeline_token } => {
+                    println!("{:?} , {:?}", pipeline_token, id);
+                    trigger_pipeline(
+                        config_path,
+                        &iam_config,
+                        &metadata_config,
+                        pipeline_token,
+                        id,
+                    )
+                    .await;
+                }
                 Commands::GenIST { jwt_secret } => gen_ist(package_path, jwt_secret),
                 Commands::SystemCheck { pipeline_token } => {
                     system_check(config_path, &iam_config, &metadata_config, pipeline_token).await
