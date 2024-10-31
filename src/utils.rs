@@ -799,6 +799,7 @@ pub async fn fetch_dependent_pipelines(
     iam_config: &IAMConfiguration,
     metadata_config: &MetadataConfiguration,
     pipeline_token: &String,
+    pipeline_ids_to_skip: Vec<String>,
 ) {
     let config = read_service_config_file(config_path).unwrap();
 
@@ -933,6 +934,12 @@ pub async fn fetch_dependent_pipelines(
 
     let client = Client::new();
     for pipeline in pipelines {
+        let pipeline_id_parts: Vec<&str> = pipeline.split("/").collect();
+
+        if pipeline_ids_to_skip.contains(&pipeline_id_parts.get(1).unwrap_or(&"").to_string()) {
+            println!("Skipping pipeline : {:?}", pipeline);
+            continue;
+        }
         if let Some((repo_owner, repo_name)) =
             repo_details_map.get(&pipeline).and_then(|x| x.clone())
         {

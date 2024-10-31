@@ -66,7 +66,11 @@ enum Commands {
     /// Given the JWT secret , this generates a long live token that can be used to call inter service endpoints
     GenIST { jwt_secret: String },
     /// Finds out and triggers the dependent pipelines
-    TriggerDependentPipelines { pipeline_token: String },
+    TriggerDependentPipelines {
+        pipeline_token: String,
+        #[clap(short, long, use_value_delimiter = true)]
+        pipelines_to_skip: Option<Vec<String>>,
+    },
     /// Finds out and triggers the dependent pipelines
     TriggerPipeline { id: String, pipeline_token: String },
     /// Connect to an environment and generate the client
@@ -140,12 +144,18 @@ async fn check_session_gurad(
                 Commands::Refresh => {
                     refresh_internal_dependency_versions(config_path, &metadata_config).await
                 }
-                Commands::TriggerDependentPipelines { pipeline_token } => {
+                Commands::TriggerDependentPipelines {
+                    pipeline_token,
+                    pipelines_to_skip,
+                } => {
+                    let pipeline_ids_to_skip = pipelines_to_skip.clone().unwrap_or_else(Vec::new);
+                    println!("{:?}", pipeline_ids_to_skip);
                     fetch_dependent_pipelines(
                         config_path,
                         &iam_config,
                         &metadata_config,
                         pipeline_token,
+                        pipeline_ids_to_skip,
                     )
                     .await;
                 }
