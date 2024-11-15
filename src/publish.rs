@@ -301,6 +301,14 @@ pub async fn publish_metadata(
         Environment::StageK8 => &services_config.urls.clone().unwrap()["stage_k8"],
     };
 
+    let env_base_url_ws = match env {
+        Environment::Dev => &services_config.urls_ws.clone().unwrap()["dev"],
+        Environment::Stage => &services_config.urls_ws.clone().unwrap()["stage"],
+        Environment::Prod => &services_config.urls_ws.clone().unwrap()["prod"],
+        Environment::ProdK8 => &services_config.urls_ws.clone().unwrap()["prod_k8"],
+        Environment::StageK8 => &services_config.urls_ws.clone().unwrap()["stage_k8"],
+    };
+    println!("env_base_url_ws: {:?} , ", env_base_url_ws);
     let spec_url = services_config.spec_url.clone();
     let spec = if let Some(spec_url) = spec_url {
         let full_url = format!("{}{}", env_base_url_swagger, spec_url);
@@ -340,6 +348,7 @@ pub async fn publish_metadata(
                 identifier: name,
                 env: env.to_string(),
                 base_url: env_base_url.clone(),
+                base_url_ws: Some(Some(env_base_url_ws.clone())),
                 spec,
                 dependencies: dependencies_list,
                 tables,

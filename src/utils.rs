@@ -247,6 +247,8 @@ pub async fn register_package(
         }
     };
 
+    println!("{:?}", services_config);
+
     let releaser_config = match read_releaser_config_file(releaser_path) {
         Ok(c) => c,
         Err(e) => {

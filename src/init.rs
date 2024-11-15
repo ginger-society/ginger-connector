@@ -23,6 +23,7 @@ pub fn initialize(config_path: &Path) {
                         services: Some(HashMap::new()),
                         spec_url: Some("/openapi.json".to_string()),
                         urls: Some(HashMap::new()),
+                        urls_ws: Some(HashMap::new()),
                         override_name: None,
                         service_type: None,
                         portals_refs: Some(HashMap::new()),
