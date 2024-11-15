@@ -1131,20 +1131,38 @@ pub async fn fetch_metadata_and_process(
             .prompt();
 
             let selected_services = ans.unwrap();
-            println!("{:?}", selected_services);
+            // println!("{:?}", selected_services);
             let mut new_services = HashMap::new();
 
             let mut new_portal_refs = HashMap::new();
+
+            let mut new_ws_refs = HashMap::new();
 
             for service_name in selected_services.iter() {
                 if let Some(service) = services
                     .iter()
                     .find(|s| format!("@{}/{}", &s.organization_id, &s.identifier) == *service_name)
                 {
+                    println!("Working on : {:?} , {:?}", service_name, service.envs);
+
                     let envs: HashMap<String, String> = service
                         .envs
                         .iter()
                         .map(|env| (env.env_key.clone(), env.base_url.clone()))
+                        .collect();
+
+                    let ws_envs: HashMap<String, String> = service
+                        .envs
+                        .iter()
+                        .map(|env| {
+                            (
+                                env.env_key.clone(),
+                                env.base_url_ws
+                                    .as_ref()
+                                    .and_then(|inner| inner.clone())
+                                    .unwrap_or_default(), // Provide a default value if None
+                            )
+                        })
                         .collect();
 
                     match service.service_type.clone().unwrap().unwrap().as_str() {
@@ -1153,6 +1171,7 @@ pub async fn fetch_metadata_and_process(
                         }
                         "RPCEndpoint" => {
                             new_services.insert(service_name.clone(), envs);
+                            new_ws_refs.insert(service_name.clone(), ws_envs);
                         }
                         _ => {
                             println!(

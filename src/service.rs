@@ -460,7 +460,7 @@ pub fn generate_references(config_path: &Path, env: Environment) {
     };
 
     // Ensure portal_refs_file is specified in the configuration
-    let portal_refs_file = match &services_config.portal_refs_file {
+    let refs_file = match &services_config.refs_file {
         Some(file) => file,
         None => {
             println!("'portal_refs_file' is not specified in the configuration. Exiting.");
@@ -496,27 +496,24 @@ pub fn generate_references(config_path: &Path, env: Environment) {
     }
 
     // Write the references content to the specified file
-    match File::create(portal_refs_file) {
+    match File::create(refs_file) {
         Ok(mut file) => {
             if let Err(err) = file.write_all(references_content.as_bytes()) {
-                println!("Failed to write to file '{}': {:?}", portal_refs_file, err);
+                println!("Failed to write to file '{}': {:?}", refs_file, err);
                 exit(1);
             }
         }
         Err(err) => {
-            println!("Failed to create file '{}': {:?}", portal_refs_file, err);
+            println!("Failed to create file '{}': {:?}", refs_file, err);
             exit(1);
         }
     }
 
-    println!(
-        "References generated successfully in '{}'",
-        portal_refs_file
-    );
+    println!("References generated successfully in '{}'", refs_file);
 
     // Add portal_refs_file to .gitignore if it's not already present
     let gitignore_path = Path::new(".gitignore");
-    let portal_refs_file_str = portal_refs_file.as_str();
+    let portal_refs_file_str = refs_file.as_str();
 
     if gitignore_path.exists() {
         let gitignore_content = fs::read_to_string(gitignore_path).unwrap();

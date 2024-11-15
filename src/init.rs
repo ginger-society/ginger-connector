@@ -19,7 +19,7 @@ pub fn initialize(config_path: &Path) {
                     let config = ServiceConfig {
                         lang: lang_selected,
                         dir: Some(dir.clone()),
-                        portal_refs_file: None,
+                        refs_file: None,
                         services: Some(HashMap::new()),
                         spec_url: Some("/openapi.json".to_string()),
                         urls: Some(HashMap::new()),
@@ -27,6 +27,7 @@ pub fn initialize(config_path: &Path) {
                         override_name: None,
                         service_type: None,
                         portals_refs: Some(HashMap::new()),
+                        ws_refs: Some(HashMap::new()),
                         organization_id: "".to_string(),
                     };
                     match write_service_config_file(config_path, &config) {
