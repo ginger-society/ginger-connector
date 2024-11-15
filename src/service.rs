@@ -495,6 +495,32 @@ pub fn generate_references(config_path: &Path, env: Environment) {
         }
     }
 
+    if let Some(ws_ref) = &services_config.ws_refs {
+        for (ws_name, ws_envs) in ws_ref {
+            if let Some(ws_url) = ws_envs.get(&env.to_string()) {
+                let formatted_name = ws_name
+                    .replace("-", "_")
+                    .replace("@", "")
+                    .replace("/", "_")
+                    .to_uppercase();
+                match services_config.lang {
+                    LANG::TS => {
+                        references_content.push_str(&format!(
+                            "export const {}_WS = '{}';\n",
+                            formatted_name, ws_url
+                        ));
+                    }
+                    LANG::Rust => todo!(),
+                    LANG::Python => {
+                        references_content
+                            .push_str(&format!("{} = '{}'\n", formatted_name, ws_url));
+                    }
+                    LANG::Shell => todo!(),
+                }
+            }
+        }
+    }
+
     // Write the references content to the specified file
     match File::create(refs_file) {
         Ok(mut file) => {

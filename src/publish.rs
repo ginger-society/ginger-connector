@@ -302,12 +302,34 @@ pub async fn publish_metadata(
     };
 
     let env_base_url_ws = match env {
-        Environment::Dev => &services_config.urls_ws.clone().unwrap()["dev"],
-        Environment::Stage => &services_config.urls_ws.clone().unwrap()["stage"],
-        Environment::Prod => &services_config.urls_ws.clone().unwrap()["prod"],
-        Environment::ProdK8 => &services_config.urls_ws.clone().unwrap()["prod_k8"],
-        Environment::StageK8 => &services_config.urls_ws.clone().unwrap()["stage_k8"],
-    };
+        Environment::Dev => services_config.urls_ws.clone().unwrap().get("dev").cloned(),
+        Environment::Stage => services_config
+            .urls_ws
+            .clone()
+            .unwrap()
+            .get("stage")
+            .cloned(),
+        Environment::Prod => services_config
+            .urls_ws
+            .clone()
+            .unwrap()
+            .get("prod")
+            .cloned(),
+        Environment::ProdK8 => services_config
+            .urls_ws
+            .clone()
+            .unwrap()
+            .get("prod_k8")
+            .cloned(),
+        Environment::StageK8 => services_config
+            .urls_ws
+            .clone()
+            .unwrap()
+            .get("stage_k8")
+            .cloned(),
+    }
+    .unwrap_or(String::from("")); // Default to None if the key is not found
+
     println!("env_base_url_ws: {:?} , ", env_base_url_ws);
     let spec_url = services_config.spec_url.clone();
     let spec = if let Some(spec_url) = spec_url {

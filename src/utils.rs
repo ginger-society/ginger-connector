@@ -1154,24 +1154,23 @@ pub async fn fetch_metadata_and_process(
                     let ws_envs: HashMap<String, String> = service
                         .envs
                         .iter()
-                        .map(|env| {
-                            (
-                                env.env_key.clone(),
-                                env.base_url_ws
-                                    .as_ref()
-                                    .and_then(|inner| inner.clone())
-                                    .unwrap_or_default(), // Provide a default value if None
-                            )
+                        .filter_map(|env| {
+                            env.base_url_ws
+                                .as_ref()
+                                .and_then(|inner| inner.clone()) // Check if value is present
+                                .map(|value| (env.env_key.clone(), value)) // Return key-value pair if value is present
                         })
                         .collect();
-
+                    println!("ws_envs : {:?}", ws_envs);
                     match service.service_type.clone().unwrap().unwrap().as_str() {
                         "Portal" => {
                             new_portal_refs.insert(service_name.clone(), envs);
                         }
                         "RPCEndpoint" => {
                             new_services.insert(service_name.clone(), envs);
-                            new_ws_refs.insert(service_name.clone(), ws_envs);
+                            if !ws_envs.is_empty() {
+                                new_ws_refs.insert(service_name.clone(), ws_envs);
+                            }
                         }
                         _ => {
                             println!(
@@ -1186,6 +1185,7 @@ pub async fn fetch_metadata_and_process(
             println!("{:?}", new_services);
             config.services = Some(new_services);
             config.portals_refs = Some(new_portal_refs);
+            config.ws_refs = Some(new_ws_refs);
 
             match write_service_config_file(config_path, &config) {
                 Ok(_) => println!("Configuration updated successfully"),
