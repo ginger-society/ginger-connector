@@ -1082,11 +1082,11 @@ pub async fn fetch_metadata_and_process(
             println!("Package description: {}", description);
 
             let service_selector_validator = |a: &[ListOption<&String>]| {
-                if a.len() < 1 {
-                    return Ok(Validation::Invalid(
-                        "At least one service is required!".into(),
-                    ));
-                }
+                // if a.len() < 1 {
+                //     return Ok(Validation::Invalid(
+                //         "At least one service is required!".into(),
+                //     ));
+                // }
                 Ok(Validation::Valid)
             };
 
