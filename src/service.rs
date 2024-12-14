@@ -1,6 +1,6 @@
 use std::{
-    fs::{self, File, OpenOptions},
-    io::Write,
+    fs::{self, read_to_string, write, File, OpenOptions},
+    io::{self, Write},
     path::{Path, PathBuf},
     process::{exit, Command},
 };
@@ -14,6 +14,21 @@ use MetadataService::apis::default_api::{
 
 use crate::{file_utils::replace_in_file, Environment};
 
+fn replace_in_files_recursive(dir_path: &str, pattern: &str, replacement: &str) -> io::Result<()> {
+    for entry in fs::read_dir(dir_path)? {
+        let entry = entry?;
+        let path = entry.path();
+        print!("Replacing import statements in : {:?}\n", path);
+        if path.is_dir() {
+            // Recurse into subdirectory
+            replace_in_files_recursive(path.to_str().unwrap(), pattern, replacement)?;
+        } else if path.is_file() {
+            // Perform replacement in the file
+            replace_in_file(path.to_str().unwrap(), pattern, replacement)?;
+        }
+    }
+    Ok(())
+}
 fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base_url: &str) {
     let output_dir = format!("{}/{}_client", root_dir, service.name);
     println!("Generating client for: {:?}", service);
@@ -306,8 +321,8 @@ export default client
                     )
                     .unwrap();
 
-                    replace_in_file(
-                        &format!("{}/{}/models/__init__.py", output_dir, service.name),
+                    replace_in_files_recursive(
+                        &format!("{}/{}/models", output_dir, service.name),
                         &format!("from {}.", service.name),
                         &format!("from {}_client.{}.", service.name, service.name),
                     )

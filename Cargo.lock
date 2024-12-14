@@ -838,9 +838,9 @@ dependencies = [
 
 [[package]]
 name = "ginger-shared-rs"
-version = "0.39.0-nightly.0"
+version = "0.41.0-nightly.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34d0475575ffc319210287ff2f737fec75796ba4a949d08dc186f6f59b74d458"
+checksum = "80bea39bb516d22b345ef93e868c3c4e9a79c04acd1da949e466a389ae111883"
 dependencies = [
  "clap",
  "dirs",

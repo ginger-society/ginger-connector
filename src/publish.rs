@@ -2,7 +2,7 @@ use crate::Environment;
 use colored::Colorize;
 use ginger_shared_rs::{
     read_consumer_db_config, read_package_metadata_file, read_releaser_config_file,
-    read_service_config_file, LANG,
+    read_service_config_file, utils::get_package_json_info, LANG,
 };
 use reqwest::Client;
 use serde_json::Value as JsonValue;
@@ -21,68 +21,6 @@ use MetadataService::{
     },
     models::UpdateServiceRequest,
 };
-
-pub fn get_package_json_info() -> Option<(String, String, String, String, Vec<String>)> {
-    let mut file = File::open("package.json").expect("Failed to open package.json");
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .expect("Failed to read package.json");
-
-    let package_json: JsonValue =
-        serde_json::from_str(&content).expect("Failed to parse package.json");
-
-    let name = package_json.get("name")?.as_str()?.to_string();
-    let version = package_json.get("version")?.as_str()?.to_string();
-    let description = package_json.get("description")?.as_str()?.to_string();
-
-    // Extract organization and package name
-    let (organization, package_name) = if name.starts_with('@') {
-        let parts: Vec<&str> = name.split('/').collect();
-        if parts.len() == 2 {
-            (
-                parts[0].trim_start_matches('@').to_string(),
-                parts[1].to_string(),
-            )
-        } else {
-            println!("The package name should be of format @scope/pkg-name");
-            exit(1);
-        }
-    } else {
-        println!("The package name should be of format @scope/pkg-name");
-        exit(1);
-    };
-
-    // Internal dependencies logic
-    let prefix = format!("@{}/", organization);
-    let mut internal_dependencies = Vec::new();
-
-    if let Some(dependencies) = package_json.get("dependencies").and_then(|d| d.as_object()) {
-        for (key, _) in dependencies {
-            if key.starts_with(&prefix) {
-                internal_dependencies.push(key.clone());
-            }
-        }
-    }
-
-    if let Some(dev_dependencies) = package_json
-        .get("devDependencies")
-        .and_then(|d| d.as_object())
-    {
-        for (key, _) in dev_dependencies {
-            if key.starts_with(&prefix) {
-                internal_dependencies.push(key.clone());
-            }
-        }
-    }
-
-    Some((
-        package_name,
-        version,
-        description,
-        organization,
-        internal_dependencies,
-    ))
-}
 
 pub fn get_cargo_toml_info() -> Option<(String, String, String, String, Vec<String>)> {
     let cargo_toml_content = fs::read_to_string("Cargo.toml").expect("Failed to read Cargo.toml");
