@@ -29,6 +29,7 @@ pub fn initialize(config_path: &Path) {
                         portals_refs: Some(HashMap::new()),
                         ws_refs: Some(HashMap::new()),
                         organization_id: "".to_string(),
+                        portal_config: None,
                     };
                     match write_service_config_file(config_path, &config) {
                         Ok(_) => println!("Success!"),
