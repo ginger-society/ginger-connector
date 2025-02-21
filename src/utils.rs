@@ -166,7 +166,7 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
             Some(id) if !id.is_empty() => {
                 // If db.id exists and is not an empty string
                 println!("Database '{}' has ID: {}", db.name, id);
-
+                
                 match metadata_update_dbschema(
                     &metadata_config,
                     MetadataUpdateDbschemaParams {
@@ -193,6 +193,14 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
             _ => {
                 // Handle case when db.id is None or an empty string
                 println!("Database '{}' is missing a valid ID", db.name);
+                let schema_path = format!("{}/schema.json", db.name);
+                let schema_content = match std::fs::read_to_string(&schema_path) {
+                    Ok(content) => content,
+                    Err(err) => {
+                        eprintln!("Error reading schema file {}: {:?}", schema_path, err);
+                        return;
+                    }
+                };
                 match metadata_create_dbschema(
                     &metadata_config,
                     MetadataCreateDbschemaParams {
@@ -205,6 +213,8 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
                             repo_origin: releaser_config.clone().settings.git_url_prefix.unwrap(),
                             version: releaser_config.version.formatted(),
                             quick_links: Some(Some(serde_json::to_string(&db.links).unwrap())),
+                            // can you add the field schema here in this struct , the value is the 
+                            schema: Some(Some(schema_content))
                         },
                     },
                 )

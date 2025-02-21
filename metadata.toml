@@ -18,3 +18,4 @@ icon = "FaGithub"
 internal = true
 label = "Browse Repo"
 link = "https://github.com/ginger-society/ginger-connector"
+

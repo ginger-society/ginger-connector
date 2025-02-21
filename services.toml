@@ -1,18 +1,35 @@
-dir = "."
 lang = "Rust"
 organization_id = "ginger-society"
+dir = "."
 spec_url = "/openapi.json"
+
+[services."@ginger-society/MetadataService"]
+stage_k8 = "http://metadata-service-api-service/metadata"
+stage = "https://api-staging.gingersociety.org/metadata"
+dev = "http://localhost:8081/metadata"
+prod = "https://api.gingersociety.org/metadata"
+prod_k8 = "http://metadata-service-api-service/metadata"
 
 [services."@ginger-society/IAMService"]
 dev = "http://localhost:8080/iam"
+prod_k8 = "http://iam-service-api-service/iam"
 stage = "https://api-staging.gingersociety.org/iam"
+prod = "https://api.gingersociety.org/iam"
 stage_k8 = "http://iam-service-api-service/iam"
 
-[services."@ginger-society/MetadataService"]
-dev = "http://localhost:8081/metadata"
-stage = "https://api-staging.gingersociety.org/metadata"
-stage_k8 = "http://metadata-service-api-service/metadata"
-
 [portals_refs]
+
+[ws_refs."@ginger-society/MetadataService"]
+prod = ""
+prod_k8 = ""
+stage_k8 = ""
+stage = ""
+
+[ws_refs."@ginger-society/IAMService"]
+stage_k8 = ""
+dev = ""
+stage = ""
+prod = ""
+prod_k8 = ""
 
 [urls]
