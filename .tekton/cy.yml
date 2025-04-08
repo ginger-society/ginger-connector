@@ -2,7 +2,9 @@ apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: build-image-and-push-to-container-registry
+  namespace: tasks-ginger-connector
   annotations:
+    x-ginger-task-namespace: "ginger-connector" # Custom annotation
     x-ginger-task-trigger-branch: '["refs/heads/main"]' # Allowed branches
 
 spec:
