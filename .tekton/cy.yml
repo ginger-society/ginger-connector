@@ -12,6 +12,7 @@ spec:
     - name: ssh-credentials # Store SSH keys
     - name: ssh-config # Store SSH setup
     - name: kubeconfig
+    - name: buildah-cache # Workspace for caching
     - name: pipeline-secrets
   steps:
     - name: clone
