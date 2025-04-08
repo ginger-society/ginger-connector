@@ -32,7 +32,7 @@ spec:
         #!/bin/sh
         set -e  # Exit on error
         cd /workspace/source/repo
-        ls -la .
+        ls -la 
 
     # - name: build
     #   image: containers.gingersociety.org/enhanced-buildah:latest
