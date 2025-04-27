@@ -194,11 +194,11 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
                 // Handle case when db.id is None or an empty string
                 println!("Database '{}' is missing a valid ID", db.name);
                 let schema_path = format!("{}/schema.json", db.name);
-                let schema_content = match std::fs::read_to_string(&schema_path) {
-                    Ok(content) => content,
+                let schema_content: Option<String> = match std::fs::read_to_string(&schema_path) {
+                    Ok(content) => Some(content),
                     Err(err) => {
                         eprintln!("Error reading schema file {}: {:?}", schema_path, err);
-                        return;
+                        None
                     }
                 };
                 match metadata_create_dbschema(
@@ -214,7 +214,7 @@ pub async fn register_db(metadata_config: &MetadataConfiguration, releaser_path:
                             version: releaser_config.version.formatted(),
                             quick_links: Some(Some(serde_json::to_string(&db.links).unwrap())),
                             // can you add the field schema here in this struct , the value is the 
-                            schema: Some(Some(schema_content))
+                            schema: Some(schema_content)
                         },
                     },
                 )

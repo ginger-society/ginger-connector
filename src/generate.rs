@@ -20,7 +20,7 @@ pub fn generate_arbitrary_client(
         LANG::Python => String::from("python"),
         _ => lang.to_string(),
     };
-
+ 
     let output = Command::new("openapi-generator-cli")
         .arg("generate")
         .arg("-g")
