@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::exit;
+use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 use generate::generate_arbitrary_client;
@@ -16,6 +17,9 @@ use utils::{
     refresh_internal_dependency_versions, register_db, register_package, system_check,
     trigger_pipeline, update_pipeline,
 };
+use tokio::signal;
+
+use ws_handler::handle_ws_event;
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::apis::default_api::identity_validate_api_token;
 use IAMService::get_configuration as get_iam_configuration;
@@ -27,6 +31,9 @@ use MetadataService::{
     apis::configuration::Configuration as MetadataConfiguration,
     get_configuration as get_metadata_configuration,
 };
+use tokio_tungstenite::connect_async;
+use futures_util::{stream::StreamExt, SinkExt};
+
 
 mod file_utils;
 mod generate;
@@ -35,6 +42,8 @@ mod publish;
 mod refresher;
 mod service;
 mod utils;
+mod ws_handler;
+
 
 /// Command line interface for managing the application
 #[derive(Parser)]
@@ -112,6 +121,62 @@ enum Commands {
     },
     /// This updates all the internal dependencies packages versions, should be run in dev machine for a sanity test and then also in the pipelien
     Refresh,
+    Watch {
+        #[clap(value_enum, default_value_t=Environment::Dev)]
+        env: Environment,
+    },
+}
+
+// Update the handle_ws_event function signature to accept owned values
+async fn handle_ws_event_async(service_name: String, metadata_config: MetadataConfiguration, config_path: PathBuf) {
+    // Call the original handler with references
+    ws_handler::handle_ws_event(&service_name, &metadata_config, &config_path).await;
+}
+
+
+// A function to run WebSocket connection
+async fn start_websocket_watcher(metadata_config: MetadataConfiguration, config_path: PathBuf) {
+    let token = get_token_from_file_storage();
+
+    match identity_validate_api_token(&get_iam_configuration(Some(token.clone()))).await {
+        Ok(response) => {
+            let url = format!(
+                "wss://api.gingersociety.org/notification/ws/workspace_{}?token={}",
+                response.sub, token
+            );
+            if let Ok((mut ws_stream, _)) = connect_async(url).await {
+                println!("WebSocket connection established");
+
+                while let Some(message) = ws_stream.next().await {
+                    match message {
+                        Ok(msg) => {
+                            if msg.is_text() {
+                                let text = msg.into_text().unwrap();
+                                println!("Received event: {}", text);
+
+                                let service_name = text.trim().to_string();
+                                handle_ws_event_async(
+                                    service_name,
+                                    metadata_config.clone(),
+                                    config_path.clone(),
+                                ).await;
+                            }
+                        }
+                        Err(e) => {
+                            println!("WebSocket error: {:?}", e);
+                            break;
+                        }
+                    }
+                }
+            } else {
+                println!("Failed to connect to WebSocket server");
+            }
+        }
+        Err(error) => {
+            println!("Token validation failed: {:?}", error);
+            exit(1);
+        }
+    }
 }
 
 #[tokio::main]
@@ -125,7 +190,12 @@ async fn check_session_gurad(
 ) {
     match identity_validate_api_token(&iam_config).await {
         Ok(response) => {
+            // Process the CLI command
             match &cli.command {
+                Commands::Watch { env: _ } => {
+                    // WebSocket connection is triggered only when running `watch`
+                    start_websocket_watcher(metadata_config.clone(), config_path.to_path_buf()).await;
+                }
                 Commands::TriggerPipeline { id, pipeline_token } => {
                     println!("{:?} , {:?}", pipeline_token, id);
                     trigger_pipeline(
@@ -239,8 +309,6 @@ async fn check_session_gurad(
                     }
                 }
             };
-
-            // println!("Token is valid: {:?}", response)
         }
         Err(error) => {
             println!("Token validation failed: {:?}", error);

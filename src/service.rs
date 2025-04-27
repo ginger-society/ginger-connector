@@ -29,7 +29,7 @@ fn replace_in_files_recursive(dir_path: &str, pattern: &str, replacement: &str) 
     }
     Ok(())
 }
-fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base_url: &str) {
+pub fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, base_url: &str) {
     let output_dir = format!("{}/{}_client", root_dir, service.name);
     println!("Generating client for: {:?}", service);
 
@@ -575,7 +575,7 @@ pub fn generate_references(config_path: &Path, env: Environment) {
     }
 }
 
-fn extract_org_and_package(input: &str) -> Option<(String, String)> {
+pub fn extract_org_and_package(input: &str) -> Option<(String, String)> {
     // Check if the input starts with '@'
     if input.starts_with('@') {
         // Split the input on '/'
