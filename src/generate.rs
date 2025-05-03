@@ -1,4 +1,4 @@
-use std::{fs::OpenOptions, io::Write, process::Command};
+use std::{fs::OpenOptions, io::Write, path::PathBuf, process::Command};
 
 use ginger_shared_rs::LANG;
 
@@ -20,8 +20,17 @@ pub fn generate_arbitrary_client(
         LANG::Python => String::from("python"),
         _ => lang.to_string(),
     };
+
+    let openapi_cli_path: PathBuf = if cfg!(target_os = "windows") {
+        let mut path = dirs::data_dir().expect("Could not get AppData directory");
+        path.push("npm");
+        path.push("openapi-generator-cli.cmd");
+        path
+    } else {
+        PathBuf::from("openapi-generator-cli")
+    };
  
-    let output = Command::new("openapi-generator-cli")
+    let output = Command::new(openapi_cli_path)
         .arg("generate")
         .arg("-g")
         .arg(language)

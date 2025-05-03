@@ -40,7 +40,16 @@ pub fn open_api_client_generator(service: &Service, lang: LANG, root_dir: &str, 
         _ => lang.to_string(),
     };
 
-    let mut binding = Command::new("openapi-generator-cli");
+    let openapi_cli_path: PathBuf = if cfg!(target_os = "windows") {
+        let mut path = dirs::data_dir().expect("Could not get AppData directory");
+        path.push("npm");
+        path.push("openapi-generator-cli.cmd");
+        path
+    } else {
+        PathBuf::from("openapi-generator-cli")
+    };
+
+    let mut binding = Command::new(openapi_cli_path);
     let command = binding
         .arg("generate")
         .arg("-g")
