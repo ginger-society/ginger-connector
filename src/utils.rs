@@ -12,9 +12,7 @@ use tokio::time::sleep;
 
 use colored::Colorize;
 use ginger_shared_rs::{
-    read_db_config, read_package_metadata_file, read_releaser_config_file,
-    read_service_config_file, utils::get_package_json_info, write_db_config,
-    write_service_config_file, ISCClaims, LANG,
+    LANG, read_db_config, read_package_metadata_file, read_releaser_config_file, read_service_config_file, rocket_utils::ISCClaims, utils::get_package_json_info, write_db_config, write_service_config_file
 };
 use inquire::{list_option::ListOption, validator::Validation, MultiSelect};
 use serde_json::json;
