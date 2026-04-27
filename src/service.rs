@@ -23,6 +23,13 @@ fn replace_in_files_recursive(dir_path: &str, pattern: &str, replacement: &str) 
             // Recurse into subdirectory
             replace_in_files_recursive(path.to_str().unwrap(), pattern, replacement)?;
         } else if path.is_file() {
+            // Ignore .pyc files
+            if let Some(ext) = path.extension() {
+                if ext == "pyc" {
+                    continue;
+                }
+            }
+
             // Perform replacement in the file
             replace_in_file(path.to_str().unwrap(), pattern, replacement)?;
         }

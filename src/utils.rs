@@ -47,6 +47,14 @@ use crate::{
     Environment,
 };
 
+
+#[derive(Deserialize, Debug, Serialize, Clone)]
+pub struct WatchContent{
+    pub resource_id: String,
+    pub event: String
+}
+
+
 fn extract_org_and_package(input: &str) -> Option<(String, String)> {
     // Ensure the input starts with '@' and contains '/'
     if input.starts_with('@') && input.contains('/') {

@@ -9,49 +9,73 @@ use MetadataService::apis::default_api::{metadata_get_service_and_env_by_id, Met
 use ginger_shared_rs::Environment;
 use crate::service::{extract_org_and_package, open_api_client_generator};
 
+
 pub async fn handle_ws_event(service_name: &str, metadata_config: &MetadataConfiguration, config_path: &Path) {
-    // load your services config
     let services_config = match read_service_config_file(config_path) {
         Ok(c) => c,
         Err(err) => {
-            println!("{:?}", err);
-            println!(
-                "There is no service configuration found. Please use {} to add one. Exiting",
+            eprintln!("Error reading config: {:?}", err);
+            eprintln!(
+                "There is no service configuration found. Please use {} to add one.",
                 "ginger-connector init".blue()
             );
-            exit(1);
+            return;
         }
     };
 
-    println!("{:?}", services_config);
-
-    // Ensure .ginger.tmp directory exists
     let ginger_tmp_dir = PathBuf::from(".ginger.tmp");
     if !ginger_tmp_dir.exists() {
         if let Err(e) = fs::create_dir(&ginger_tmp_dir) {
             eprintln!("Error creating .ginger.tmp directory: {:?}", e);
-            exit(1);
+            return;
         }
     }
+
     let environment = Environment::Prod;
 
-    let services = services_config.services
-    .as_ref()
-    .expect("services field is missing in service config");
+    let services = match &services_config.services {
+        Some(s) => s,
+        None => {
+            eprintln!("'services' field missing in service config file");
+            return;
+        }
+    };
 
-    let service_urls = services.get(service_name)
-    .expect(&format!("Service '{}' not found in service configuration", service_name));
+    let service_urls = match services.get(service_name) {
+        Some(urls) => urls,
+        None => {
+            eprintln!(
+                "{}: Service '{}' not found in service configuration.",
+                "Warning".yellow(),
+                service_name
+            );
+            return;
+        }
+    };
 
     let base_url = match environment {
-        Environment::Dev => service_urls["dev"].clone(),
-        Environment::Stage => service_urls["stage"].clone(),
-        Environment::Prod => service_urls["prod"].clone(),
-        Environment::ProdK8 => service_urls["prod_k8"].clone(),
-        Environment::StageK8 => service_urls["stage_k8"].clone(),
+        Environment::Dev => service_urls.get("dev"),
+        Environment::Stage => service_urls.get("stage"),
+        Environment::Prod => service_urls.get("prod"),
+        Environment::ProdK8 => service_urls.get("prod_k8"),
+        Environment::StageK8 => service_urls.get("stage_k8"),
+    };
+
+    let base_url = match base_url {
+        Some(url) => url,
+        None => {
+            eprintln!(
+                "URL not found for environment {:?} in service '{:?}'",
+                "Warning".yellow(),
+                service_name
+            );
+            return;
+        }
     };
 
     if let Some((org_id, package_name)) = extract_org_and_package(service_name) {
         println!("org_id: {}, package_name: {}", org_id, package_name);
+
         match metadata_get_service_and_env_by_id(
             metadata_config,
             MetadataGetServiceAndEnvByIdParams {
@@ -65,10 +89,9 @@ pub async fn handle_ws_event(service_name: &str, metadata_config: &MetadataConfi
             Ok(response) => {
                 let spec_path = ginger_tmp_dir.join(format!(
                     "{}@{}.{}.spec.json",
-                    package_name.clone(),
-                    org_id.clone(),
-                    environment
+                    package_name, org_id, environment
                 ));
+
                 match OpenOptions::new()
                     .write(true)
                     .create(true)
@@ -82,25 +105,22 @@ pub async fn handle_ws_event(service_name: &str, metadata_config: &MetadataConfi
                     }
                     Err(e) => eprintln!("Error creating {}: {:?}", spec_path.display(), e),
                 }
+
+                open_api_client_generator(
+                    &Service {
+                        schema_url: spec_path.to_string_lossy().to_string(),
+                        name: package_name.to_string(),
+                    },
+                    services_config.lang,
+                    &services_config.dir.clone().unwrap_or_else(|| ".".into()),
+                    base_url,
+                );
             }
             Err(e) => {
-                println!("{:?}", e)
+                eprintln!("Failed to fetch metadata for {}: {:?}", package_name, e);
             }
         }
-
-        open_api_client_generator(
-            &Service {
-                schema_url: format!(
-                    ".ginger.tmp/{}@{}.{}.spec.json",
-                    package_name, org_id, environment
-                ),
-                name: package_name.to_string(),
-            },
-            services_config.lang,
-            &services_config.dir.clone().unwrap(),
-            &base_url,
-        );
     } else {
-        println!("Input is not in the expected format");
+        eprintln!("Input '{}' is not in the expected format", service_name);
     }
 }

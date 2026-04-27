@@ -15,11 +15,10 @@ use service::{generate_client, generate_references};
 use utils::{
     fetch_dependent_pipelines, fetch_metadata_and_process, gen_ist,
     refresh_internal_dependency_versions, register_db, register_package, system_check,
-    trigger_pipeline, update_pipeline,
+    trigger_pipeline, update_pipeline, WatchContent,
 };
 use tokio::signal;
 
-use ws_handler::handle_ws_event;
 use IAMService::apis::configuration::Configuration as IAMConfiguration;
 use IAMService::apis::default_api::identity_validate_api_token;
 use IAMService::get_configuration as get_iam_configuration;
@@ -133,51 +132,80 @@ async fn handle_ws_event_async(service_name: String, metadata_config: MetadataCo
     ws_handler::handle_ws_event(&service_name, &metadata_config, &config_path).await;
 }
 
-
-// A function to run WebSocket connection
 async fn start_websocket_watcher(metadata_config: MetadataConfiguration, config_path: PathBuf) {
     let token = get_token_from_file_storage();
 
-    match identity_validate_api_token(&get_iam_configuration(Some(token.clone()))).await {
-        Ok(response) => {
-            let url = format!(
-                "wss://api.gingersociety.org/notification/ws/workspace_{}?token={}",
-                response.sub, token
-            );
-            if let Ok((mut ws_stream, _)) = connect_async(url).await {
-                println!("WebSocket connection established");
-
-                while let Some(message) = ws_stream.next().await {
-                    match message {
-                        Ok(msg) => {
-                            if msg.is_text() {
-                                let text = msg.into_text().unwrap();
-                                println!("Received event: {}", text);
-
-                                let service_name = text.trim().to_string();
-                                handle_ws_event_async(
-                                    service_name,
-                                    metadata_config.clone(),
-                                    config_path.clone(),
-                                ).await;
-                            }
-                        }
-                        Err(e) => {
-                            println!("WebSocket error: {:?}", e);
-                            break;
-                        }
-                    }
-                }
-            } else {
-                println!("Failed to connect to WebSocket server");
-            }
-        }
+    // Token validation is done once at the beginning
+    let response = match identity_validate_api_token(&get_iam_configuration(Some(token.clone()))).await {
+        Ok(res) => res,
         Err(error) => {
             println!("Token validation failed: {:?}", error);
             exit(1);
         }
+    };
+
+    let url = format!(
+        "wss://api.gingersociety.org/notification/ws/workspace_{}?token={}",
+        response.sub, token
+    );
+
+    let mut attempt: u32 = 0;
+    loop {
+        println!("Attempting to connect to WebSocket (try #{})...", attempt + 1);
+
+        match connect_async(&url).await {
+            Ok((mut ws_stream, _)) => {
+                println!("WebSocket connection established");
+
+                while let Some(msg_result) = ws_stream.next().await {
+                    match msg_result {
+                        Ok(msg) => {
+                            if msg.is_text() {
+                                let content = msg.into_text().unwrap_or_default();
+
+                                match serde_json::from_str::<WatchContent>(&content) {
+                                    Ok(watch_content) => {
+                                        println!("Received event: {:?}", watch_content);
+
+
+                                        if watch_content.event.trim().eq_ignore_ascii_case("CONNECT") {
+                                            handle_ws_event_async(
+                                                watch_content.resource_id.trim().to_string(),
+                                                metadata_config.clone(),
+                                                config_path.clone(),
+                                            ).await;
+                                        }else {
+                                            println!("⚠️ Unhandled event type: {}", watch_content.event);
+                                        }
+
+                                       
+                                    }
+                                    Err(_) => println!("💬 Non-JSON WS message: {}", content),
+                                }
+
+
+                                
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("WebSocket error: {:?}. Reconnecting...", e);
+                            break; // Exit the inner loop to retry connection
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to connect to WebSocket: {:?}", e);
+            }
+        }
+
+        attempt += 1;
+        let backoff = std::cmp::min(60, 2_u64.pow(attempt)); // max 60s
+        println!("Reconnecting in {} seconds...", backoff);
+        tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
     }
 }
+
 
 #[tokio::main]
 async fn check_session_gurad(
@@ -192,8 +220,13 @@ async fn check_session_gurad(
         Ok(response) => {
             // Process the CLI command
             match &cli.command {
-                Commands::Watch { env: _ } => {
+                Commands::Watch { env } => {
+                    
+                    generate_client(config_path, env.clone(), metadata_config).await;
+                    
                     // WebSocket connection is triggered only when running `watch`
+
+
                     start_websocket_watcher(metadata_config.clone(), config_path.to_path_buf()).await;
                 }
                 Commands::TriggerPipeline { id, pipeline_token } => {

@@ -67,3 +67,9 @@ docker rm temp_container
 docker build -t ginger-connector . -f build-scripts/Dockerfile.debian --platform=linux/amd64
 
 ```
+
+
+
+bash <(curl -s https://raw.githubusercontent.com/ginger-society/infra-as-code-repo/main/rust-helpers/builder.sh)
+
+bash <(curl -s https://raw.githubusercontent.com/ginger-society/infra-as-code-repo/main/rust-helpers/uploder.sh)
